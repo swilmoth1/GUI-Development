@@ -120,46 +120,18 @@ class AnnotationSettingsGUI:
             
             self.material_menu = ctk.CTkComboBox(material_frame,
                                                 values=list(materials.keys()),
-                                                command=self.apply_material_defaults)
+                                                command=self.apply_material_defaults_and_draw_notebook())
+            
+
             self.material_menu.grid(row=1, column=1, padx=5)
             self.material_menu.set("Select Material")
             
             if not self.use_material_defaults.get():
                 self.material_menu.configure(state="disabled")
         
-        # Manual Settings Section
-        settings_notebook = ttk.Notebook(self.window)
-        self.widgets.append(settings_notebook)
-        settings_notebook.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+      
         
-        # Annotation Settings Tab (renamed from Position Settings)
-        settings_frame = ctk.CTkFrame(settings_notebook)
-        self.widgets.append(settings_frame)
-        settings_notebook.add(settings_frame, text="Annotation Settings")
-        
-        # Create frames for each corner
-        corners = ["Top Left", "Top Right", "Bottom Left", "Bottom Right"]
-        for i, corner in enumerate(corners):
-            corner_frame = ctk.CTkFrame(settings_frame)
-            self.widgets.append(corner_frame)
-            corner_frame.grid(row=i//2, column=i%2, padx=5, pady=5, sticky="nsew")
-            
-            # Corner checkbox
-            ctk.CTkCheckBox(corner_frame, 
-                           text=corner,
-                           variable=self.label_positions[corner.lower().replace(" ", "-")]).grid(row=0, column=0)
-            
-            # Field selection frame
-            fields_frame = ctk.CTkFrame(corner_frame)
-            self.widgets.append(fields_frame)
-            fields_frame.grid(row=1, column=0, padx=5, pady=5)
-            
-            # Add appropriate fields based on corner
-            field_dict = getattr(self, f"{corner.lower().replace(' ', '_')}_fields")
-            for row, (field, vars) in enumerate(field_dict.items()):
-                ctk.CTkCheckBox(fields_frame, text=field, variable=vars["show"]).grid(row=row, column=0)
-                if "value" in vars:
-                    ctk.CTkEntry(fields_frame, textvariable=vars["value"]).grid(row=row, column=1)
+        self.draw_annotation_setting_notebook()
         
         # Save Button
         save_button = ctk.CTkButton(self.window, text="Save Settings", command=self.save_settings)
@@ -169,6 +141,83 @@ class AnnotationSettingsGUI:
         # Configure grid weights
         self.window.grid_rowconfigure(2, weight=1)
         self.window.grid_columnconfigure(0, weight=1)
+
+    def apply_material_defaults_and_draw_notebook(self):
+        self.apply_material_defaults()
+        self.draw_annotation_setting_notebook()
+        
+        
+    def draw_annotation_setting_notebook(self):
+        try:
+            settings_notebook.forget()
+        except NameError:
+            pass
+    
+        settings_notebook = ttk.Notebook(self.window)
+        self.widgets.append(settings_notebook)
+        settings_notebook.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        
+        settings_frame = ctk.CTkFrame(settings_notebook)
+        self.widgets.append(settings_frame)
+        settings_notebook.add(settings_frame, text="Annotation Settings")
+        corners = ["Top Left", "Top Right", "Bottom Left", "Bottom Right"]
+        for i, corner in enumerate(corners):
+            corner_frame = ctk.CTkFrame(settings_frame)
+            self.widgets.append(corner_frame)
+            corner_frame.grid(row=i//2, column=i%2, padx=5, pady=5, sticky="nsew")
+            
+            # Get the field dictionary for this corner
+            field_dict = getattr(self, f"{corner.lower().replace(' ', '_')}_fields")
+            
+            # Store corner checkbox reference with command to update children
+            corner_var = self.label_positions[corner.lower().replace(" ", "-")]
+            corner_checkbox = ctk.CTkCheckBox(
+                corner_frame, 
+                text=corner, 
+                variable=corner_var,
+                command=lambda d=field_dict: self.update_child_checkboxes(d, corner_var)
+            )
+            corner_checkbox.grid(row=0, column=0)
+            
+            # Field selection frame
+            fields_frame = ctk.CTkFrame(corner_frame)
+            self.widgets.append(fields_frame)
+            fields_frame.grid(row=1, column=0, padx=5, pady=5)
+            
+            # Add appropriate fields based on corner
+            for row, (field, vars) in enumerate(field_dict.items()):
+                child_checkbox = ctk.CTkCheckBox(
+                    fields_frame, 
+                    text=field, 
+                    variable=vars["show"],
+                    command=lambda c=corner_var, d=field_dict: self.update_parent_checkbox(c, d)
+                )
+                child_checkbox.grid(row=row, column=0)
+                
+                if "value" in vars:
+                    ctk.CTkEntry(fields_frame, textvariable=vars["value"]).grid(row=row, column=1)
+
+    def update_child_checkboxes(self, field_dict, parent_var):
+        """Update child checkboxes based on parent state"""
+        parent_state = parent_var.get()
+        for field_vars in field_dict.values():
+            field_vars["show"].set(parent_state)
+
+    def update_parent_checkbox(self, corner_var, field_dict):
+        """Update parent checkbox based on children states"""
+        any_checked = False
+        all_unchecked = True
+        
+        for field_vars in field_dict.values():
+            if field_vars["show"].get():
+                any_checked = True
+                all_unchecked = False
+                break
+        
+        if any_checked:
+            corner_var.set(True)
+        elif all_unchecked:
+            corner_var.set(False)
 
     def save_settings(self):
         # Get current material
@@ -250,6 +299,10 @@ class AnnotationSettingsGUI:
         for widget in self.widgets:
             if widget.winfo_exists():
                 widget.update()
+                
+        self.draw_annotation_setting_notebook()
+        
+        
 
     def load_settings(self, weld_material=None):
         if os.path.exists(self.material_defaults_file):
