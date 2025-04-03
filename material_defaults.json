@@ -1,0 +1,50 @@
+{
+    "316SS": {
+        "bottom_left_fields": {
+            "Job Number": "60",
+            "Wire Feed Speed": "220",
+            "Travel Speed": "12"
+        },
+        "bottom_right_fields": {
+            "Camera": "Basler acA800-200gc\n",
+            "Lens": "C12-2524-25M-P\n",
+            "Viewing Angle": "45",
+            "Focus": "0.19",
+            "Aperature": "16",
+            "Distance": "150",
+            "CTWD (mm)": "16"
+        },
+        "top_right_fields": {
+            "Illum": "None",
+            "Shielding Gas": "98% Ar 2% O2",
+            "Note": ""
+        },
+        "top_left_fields": {
+            "FA": "0.8OD ND"
+        }
+    },
+    "410SS": {
+        "bottom_left_fields": {
+            "Job Number": "51",
+            "Wire Feed Speed": "5334\n",
+            "Travel Speed": "381"
+        },
+        "bottom_right_fields": {
+            "Camera": "Basler acA800-200gc\n",
+            "Lens": "C12-2524-25M-P\n",
+            "Viewing Angle": "45",
+            "Focus": "0.19",
+            "Aperature": "16",
+            "Distance": "150",
+            "CTWD (mm)": "16"
+        },
+        "top_right_fields": {
+            "Illum": "nONE",
+            "Shielding Gas": "98% Ar, 2% O2",
+            "Note": ""
+        },
+        "top_left_fields": {
+            "FA": "0.8OD ND"
+        }
+    }
+}

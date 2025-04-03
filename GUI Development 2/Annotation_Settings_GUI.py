@@ -7,16 +7,39 @@ import numpy as np
 import math
 import os
 import json
+import Material_Defaults_GUI as MDG
 
 class AnnotationSettingsGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Annotation Settings")
-        self.settings_file = "annotation_settings.json"
+        
+        # Create settings window with proper cleanup handling
+        self.window = ctk.CTkToplevel(root)
+        self.window.title("Annotation Settings")
+        self.window.after(10, self.window.lift)  # Ensure window appears on top
+        self.window.grab_set()
+        
+        # Store widget references for proper cleanup
+        self.widgets = []
+        
+        #setup window closing protocol
+        self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+        #prevent interaction with the main GUI window while open
+        self.window.grab_set()
+        
+        # Add title to Recording Settings window
+        title = ctk.CTkLabel(self.window, text="Annotation Settings", 
+                            font=("Arial", 20, "bold"))
+        title.grid(row=0,column=0,pady=20)
+        
+        
+        self.material_defaults_file = "material_defaults.json"
         self.recording_settings_file = "recording_settings.json"
+        self.settings_file = "annotation_settings.json"
         
         # Add material defaults
-        self.material_defaults = MaterialDefaults()
+        self.material_defaults = MDG.MaterialDefaultsGUI.load_materials(self)
         self.selected_material = tk.StringVar()
         self.use_material_defaults = tk.BooleanVar(value=False)
         
@@ -74,7 +97,285 @@ class AnnotationSettingsGUI:
         
         self.vars = {}  # Store all variables
         
-        self.load_settings()
+        self.load_settings(None)  # Initialize with no material selected
         self.create_widgets()
 
+   
+    def create_widgets(self):
+        # Material Selection Section
+        material_frame = ctk.CTkFrame(self.window)
+        self.widgets.append(material_frame)
+        material_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+        
+        material_label = ctk.CTkLabel(material_frame, text="Material Default Selection")
+        material_label.grid(row=0, column=0, columnspan=2, padx=5, pady=5)
+        
+        materials = self.load_defaults()
+        if materials:
+            use_defaults_cb = ctk.CTkCheckBox(material_frame, 
+                                             text="Use Material Defaults", 
+                                             variable=self.use_material_defaults,
+                                             command=self.handle_material_selection)
+            use_defaults_cb.grid(row=1, column=0, padx=5)
+            
+            self.material_menu = ctk.CTkComboBox(material_frame,
+                                                values=list(materials.keys()),
+                                                command=self.apply_material_defaults)
+            self.material_menu.grid(row=1, column=1, padx=5)
+            self.material_menu.set("Select Material")
+            
+            if not self.use_material_defaults.get():
+                self.material_menu.configure(state="disabled")
+        
+        # Manual Settings Section
+        settings_notebook = ttk.Notebook(self.window)
+        self.widgets.append(settings_notebook)
+        settings_notebook.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        
+        # Annotation Settings Tab (renamed from Position Settings)
+        settings_frame = ctk.CTkFrame(settings_notebook)
+        self.widgets.append(settings_frame)
+        settings_notebook.add(settings_frame, text="Annotation Settings")
+        
+        # Create frames for each corner
+        corners = ["Top Left", "Top Right", "Bottom Left", "Bottom Right"]
+        for i, corner in enumerate(corners):
+            corner_frame = ctk.CTkFrame(settings_frame)
+            self.widgets.append(corner_frame)
+            corner_frame.grid(row=i//2, column=i%2, padx=5, pady=5, sticky="nsew")
+            
+            # Corner checkbox
+            ctk.CTkCheckBox(corner_frame, 
+                           text=corner,
+                           variable=self.label_positions[corner.lower().replace(" ", "-")]).grid(row=0, column=0)
+            
+            # Field selection frame
+            fields_frame = ctk.CTkFrame(corner_frame)
+            self.widgets.append(fields_frame)
+            fields_frame.grid(row=1, column=0, padx=5, pady=5)
+            
+            # Add appropriate fields based on corner
+            field_dict = getattr(self, f"{corner.lower().replace(' ', '_')}_fields")
+            for row, (field, vars) in enumerate(field_dict.items()):
+                ctk.CTkCheckBox(fields_frame, text=field, variable=vars["show"]).grid(row=row, column=0)
+                if "value" in vars:
+                    ctk.CTkEntry(fields_frame, textvariable=vars["value"]).grid(row=row, column=1)
+        
+        # Save Button
+        save_button = ctk.CTkButton(self.window, text="Save Settings", command=self.save_settings)
+        self.widgets.append(save_button)
+        save_button.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
+        
+        # Configure grid weights
+        self.window.grid_rowconfigure(2, weight=1)
+        self.window.grid_columnconfigure(0, weight=1)
+
+    def save_settings(self):
+        # Get current material
+        material = self.material_menu.get()
+        
+        # Create settings dictionary
+        settings = {
+            "material_defaults": {
+                "enabled": self.use_material_defaults.get(),
+                "selected": material
+            },
+            "manual_settings": {
+                "label_positions": {pos: var.get() for pos, var in self.label_positions.items()},
+                "top_left_fields": {field: {"show": vars["show"].get(), "value": vars.get("value", tk.StringVar()).get()} 
+                                  for field, vars in self.top_left_fields.items()},
+                # Add other fields similarly
+            }
+        }
+        
+        with open(self.settings_file, 'w') as f:
+            json.dump(settings, f, indent=4)
+        
+        self.on_closing()  # Use on_closing instead of direct destroy
+
+    def apply_material_defaults(self, choice=None):
+        """Apply settings when material is selected from dropdown"""
+        if not self.use_material_defaults.get():
+            return
+            
+        material = self.material_menu.get()
+        if material == "Select Material":
+            return
+            
+        # Load material defaults
+        defaults = self.load_defaults()
+        if material not in defaults:
+            return
+            
+        material_settings = defaults[material]
+        
+        # Clear existing settings
+        self.clear_settings()
+        
+        # Apply new settings
+        for key, value in material_settings.items():
+            if key == "label_positions":
+                for pos, enabled in value.items():
+                    if pos in self.label_positions:
+                        self.label_positions[pos].set(enabled)
+                        
+            elif key in ["top_left_fields", "top_right_fields", 
+                        "bottom_left_fields", "bottom_right_fields"]:
+                field_group = getattr(self, key)
+                for field, settings in value.items():
+                    if field in field_group:
+                        if isinstance(settings, dict):
+                            field_group[field]["show"].set(settings.get("show", False))
+                            if "value" in field_group[field]:
+                                field_group[field]["value"].set(settings.get("value", ""))
+        
+        # Force complete UI refresh
+        self.refresh_ui()
     
+    def clear_settings(self):
+        """Reset all settings to defaults"""
+        for group in [self.top_left_fields, self.top_right_fields, 
+                     self.bottom_left_fields, self.bottom_right_fields]:
+            for field in group.values():
+                field["show"].set(False)
+                if "value" in field:
+                    field["value"].set("")
+    
+    def refresh_ui(self):
+        """Force complete UI refresh"""
+        self.window.update_idletasks()
+        self.window.update()
+        
+        # Trigger update on all frames
+        for widget in self.widgets:
+            if widget.winfo_exists():
+                widget.update()
+
+    def load_settings(self, weld_material=None):
+        if os.path.exists(self.material_defaults_file):
+            with open(self.material_defaults_file, 'r') as f:
+                settings = json.load(f)
+                if weld_material and weld_material in settings:
+                    self._apply_settings(settings[weld_material])
+                elif settings:  # If no specific material, use first available
+                    first_material = next(iter(settings))
+                    self._apply_settings(settings[first_material])
+
+    def _apply_settings(self, settings_branch):
+        """Helper method to apply settings from a specific branch"""
+        try:
+            # Set basic flags
+            self.show_boxes.set(settings_branch.get("show_boxes", True))
+            self.show_labels.set(settings_branch.get("show_labels", True))
+            
+            # Update label positions
+            for pos, value in settings_branch.get("label_positions", {}).items():
+                if pos in self.label_positions:
+                    self.label_positions[pos].set(value)
+            
+            # Define field mappings
+            field_mappings = {
+                "bottom_left_fields": self.bottom_left_fields,
+                "bottom_right_fields": self.bottom_right_fields,
+                "top_right_fields": self.top_right_fields,
+                "top_left_fields": self.top_left_fields
+            }
+            
+            # Update each field group
+            for group_name, fields in field_mappings.items():
+                if group_data := settings_branch.get(group_name, {}):
+                    for field_name, field_vars in fields.items():
+                        if field_data := group_data.get(field_name):
+                            # Update show/hide status
+                            if isinstance(field_data, dict):
+                                field_vars["show"].set(field_data.get("show", False))
+                                if "value" in field_vars and "value" in field_data:
+                                    field_vars["value"].set(str(field_data["value"]))
+                            else:
+                                # Handle direct value assignment
+                                if "value" in field_vars:
+                                    field_vars["value"].set(str(field_data))
+                                field_vars["show"].set(True)
+                                    
+        except Exception as e:
+            print(f"Error applying settings: {e}")
+            
+        # Force update of all widgets
+        self.window.update_idletasks()
+
+    def on_closing(self):
+        """Properly cleanup widgets and destroy window"""
+        # Release grab before destroying
+        self.window.grab_release()
+        
+        # Clean up widgets
+        for widget in self.widgets:
+            if widget.winfo_exists():
+                widget.destroy()
+        self.widgets.clear()
+        
+        # Destroy window
+        if self.window.winfo_exists():
+            self.window.destroy()
+
+    def handle_material_selection(self):
+        if self.use_material_defaults.get():
+            self.material_menu.configure(state='readonly')
+            if self.selected_material.get():
+                self.apply_material_defaults()
+        else:
+            self.material_menu.configure(state='disabled')
+    
+    def apply_material_defaults(self, event=None):
+        if not self.use_material_defaults.get():
+            return
+        material=self.selected_material.get()
+        if not material:
+            return
+        values = self.load_defaults()
+        
+        # Apply values to all field groups
+        for group, fields in values.items():
+            if hasattr(self,group):
+                group_fields = getattr(self, group)
+                for field, field_values in fields.items():
+                    if field in group_fields:
+                        group_fields[field]['value'].set(field_values)
+    
+    def save_settings(self):
+        """Save annotation settings to file"""
+        settings = {}
+        
+        # Properly handle annotation variables
+        for key, var in self.vars.items():
+            if isinstance(var, dict):
+                settings[key] = {
+                    "enabled": var.get("enabled", tk.BooleanVar()).get(),
+                    "threshold": var.get("threshold", tk.StringVar()).get()
+                }
+            else:
+                settings[key] = var.get()
+        
+        # Save to file
+        with open(self.settings_file, 'w') as f:
+            json.dump(settings, f, indent=4)
+        
+        # Update main GUI
+        if hasattr(self.root, 'master') and hasattr(self.root.master, 'display_frame'):
+            display_frame = self.root.master.display_frame
+            self.update_gui(display_frame)
+        
+        print("Annotation Settings Saved:", settings)
+        self.root.destroy()
+    
+    def load_defaults(self):
+        if os.path.exists(self.material_defaults_file):
+            with open(self.material_defaults_file, 'r') as f:
+                return json.load(f)
+        return {}
+        
+    def update_gui(display_frame):
+        if display_frame:
+            display_frame.load_settings()
+            display_frame.update_display([])
+            display_frame.update_idletasks()

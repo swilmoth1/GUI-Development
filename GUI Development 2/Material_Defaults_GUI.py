@@ -39,7 +39,9 @@ class MaterialDefaultsGUI:
         # Load materials before creating widgets
         self.load_materials()
         self.create_widgets()
-        
+    
+
+    
     # Load any materials that might be stored in a .json file. Saved previously or one may not exist
     def load_materials(self):
         """Load materials from JSON file or create new one"""
