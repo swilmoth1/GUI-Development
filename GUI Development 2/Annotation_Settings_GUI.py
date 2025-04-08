@@ -97,10 +97,13 @@ class AnnotationSettingsGUI:
         
         self.vars = {}  # Store all variables
         
+        
+        
         self.load_settings(None)  # Initialize with no material selected
         self.create_widgets()
+        
+    
 
-   
     def create_widgets(self):
         # Material Selection Section
         material_frame = ctk.CTkFrame(self.window)
@@ -111,6 +114,8 @@ class AnnotationSettingsGUI:
         material_label.grid(row=0, column=0, columnspan=2, padx=5, pady=5)
         
         materials = self.load_defaults()
+        
+       
         if materials:
             use_defaults_cb = ctk.CTkCheckBox(material_frame, 
                                              text="Use Material Defaults", 
@@ -120,11 +125,19 @@ class AnnotationSettingsGUI:
             
             self.material_menu = ctk.CTkComboBox(material_frame,
                                                 values=list(materials.keys()),
-                                                command=self.apply_material_defaults_and_draw_notebook())
+                                                command=self.apply_material_defaults_and_draw_notebook)
             
 
             self.material_menu.grid(row=1, column=1, padx=5)
             self.material_menu.set("Select Material")
+            
+            self.update_material_menu_button = ctk.CTkButton(
+                material_frame, 
+                text="Update Annotation Settings", 
+                command=lambda: self.apply_material_defaults_and_draw_notebook(None)
+            )
+            self.update_material_menu_button.grid(row=1, column=2, padx=5)
+            
             
             if not self.use_material_defaults.get():
                 self.material_menu.configure(state="disabled")
@@ -142,9 +155,18 @@ class AnnotationSettingsGUI:
         self.window.grid_rowconfigure(2, weight=1)
         self.window.grid_columnconfigure(0, weight=1)
 
-    def apply_material_defaults_and_draw_notebook(self):
-        self.apply_material_defaults()
+    def apply_material_defaults_and_draw_notebook(self, choice=None):
+        # print(choice)
+        # material_selection_from_combobox=self.load_material_from_json(choice)
+        self.load_settings(choice)
         self.draw_annotation_setting_notebook()
+    
+    def load_material_from_json(self, choice=None):
+        with open(self.material_defaults_file, 'r') as f:
+            data=json.load(f)
+            material_settings_from_selection = data.get(choice)
+            return material_settings_from_selection
+        
         
         
     def draw_annotation_setting_notebook(self):
@@ -230,17 +252,24 @@ class AnnotationSettingsGUI:
                 "selected": material
             },
             "manual_settings": {
+                "show_boxes": self.show_boxes.get(),
+                "show_labels": self.show_labels.get(),
                 "label_positions": {pos: var.get() for pos, var in self.label_positions.items()},
                 "top_left_fields": {field: {"show": vars["show"].get(), "value": vars.get("value", tk.StringVar()).get()} 
                                   for field, vars in self.top_left_fields.items()},
-                # Add other fields similarly
+                "top_right_fields": {field: {"show": vars["show"].get(), "value": vars.get("value", tk.StringVar()).get()} 
+                                   for field, vars in self.top_right_fields.items()},
+                "bottom_left_fields": {field: {"show": vars["show"].get(), "value": vars.get("value", tk.StringVar()).get()} 
+                                     for field, vars in self.bottom_left_fields.items()},
+                "bottom_right_fields": {field: {"show": vars["show"].get(), "value": vars.get("value", tk.StringVar()).get()} 
+                                      for field, vars in self.bottom_right_fields.items()}
             }
         }
         
         with open(self.settings_file, 'w') as f:
             json.dump(settings, f, indent=4)
         
-        self.on_closing()  # Use on_closing instead of direct destroy
+        self.on_closing()
 
     def apply_material_defaults(self, choice=None):
         """Apply settings when material is selected from dropdown"""
@@ -382,9 +411,7 @@ class AnnotationSettingsGUI:
     def apply_material_defaults(self, event=None):
         if not self.use_material_defaults.get():
             return
-        material=self.selected_material.get()
-        if not material:
-            return
+        material=event
         values = self.load_defaults()
         
         # Apply values to all field groups
@@ -395,31 +422,7 @@ class AnnotationSettingsGUI:
                     if field in group_fields:
                         group_fields[field]['value'].set(field_values)
     
-    def save_settings(self):
-        """Save annotation settings to file"""
-        settings = {}
-        
-        # Properly handle annotation variables
-        for key, var in self.vars.items():
-            if isinstance(var, dict):
-                settings[key] = {
-                    "enabled": var.get("enabled", tk.BooleanVar()).get(),
-                    "threshold": var.get("threshold", tk.StringVar()).get()
-                }
-            else:
-                settings[key] = var.get()
-        
-        # Save to file
-        with open(self.settings_file, 'w') as f:
-            json.dump(settings, f, indent=4)
-        
-        # Update main GUI
-        if hasattr(self.root, 'master') and hasattr(self.root.master, 'display_frame'):
-            display_frame = self.root.master.display_frame
-            self.update_gui(display_frame)
-        
-        print("Annotation Settings Saved:", settings)
-        self.root.destroy()
+    
     
     def load_defaults(self):
         if os.path.exists(self.material_defaults_file):

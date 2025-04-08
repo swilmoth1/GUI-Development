@@ -1,6 +1,7 @@
 {
     "316SS": {
         "bottom_left_fields": {
+            "Material": "316SS",
             "Job Number": "60",
             "Wire Feed Speed": "220",
             "Travel Speed": "12"
@@ -25,6 +26,7 @@
     },
     "410SS": {
         "bottom_left_fields": {
+            "Material": "410SS",
             "Job Number": "51",
             "Wire Feed Speed": "5334\n",
             "Travel Speed": "381"

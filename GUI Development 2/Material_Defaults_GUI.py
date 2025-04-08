@@ -21,7 +21,7 @@ class MaterialDefaultsGUI:
         
         # Set fields
         self.fields = {
-            'bottom_left_fields': ['Job Number', 'Wire Feed Speed', 'Travel Speed'],
+            'bottom_left_fields': ['Material','Job Number', 'Wire Feed Speed', 'Travel Speed'],
             'bottom_right_fields': ['Camera', 'Lens', 'Viewing Angle', 'Focus', 'Aperature', 'Distance', 'CTWD (mm)'],
             'top_right_fields': ['Illum', 'Shielding Gas', 'Note'],
             'top_left_fields': ['FA']
@@ -193,7 +193,9 @@ class MaterialDefaultsGUI:
             for section, fields in self.entries.items():
                 for field, entry in fields.items():
                     entry.delete(0, tk.END)
-                    if section in values and field in values[section]:
+                    if field == 'Material':  # Special handling for Material field
+                        entry.insert(0, material)
+                    elif section in values and field in values[section]:
                         entry.insert(0, values[section][field])
                 
             

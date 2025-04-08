@@ -1,0 +1,44 @@
+{
+    "metrics": {
+        "X Average": false,
+        "X Maximum": false,
+        "X Minimum": false,
+        "Y Average": false,
+        "Y Maximum": false,
+        "Y Minimum": false,
+        "X Average Standard Deviation": false,
+        "Y Average Standard Deviation": false,
+        "Class Area": false,
+        "Class Area Standard Deviation": false
+    },
+    "show_charts": {
+        "X Position Values": false,
+        "Y Position Values": false,
+        "Position Standard Deviations": false,
+        "Class Area": false,
+        "Class Area Standard Deviation": false
+    },
+    "save_charts": false,
+    "chart_groups": {
+        "X Position Values": [
+            "X Average",
+            "X Maximum",
+            "X Minimum"
+        ],
+        "Y Position Values": [
+            "Y Average",
+            "Y Maximum",
+            "Y Minimum"
+        ],
+        "Position Standard Deviations": [
+            "X Average Standard Deviation",
+            "Y Average Standard Deviation"
+        ],
+        "Class Area": [
+            "Class Area"
+        ],
+        "Class Area Standard Deviation": [
+            "Class Area Standard Deviation"
+        ]
+    }
+}

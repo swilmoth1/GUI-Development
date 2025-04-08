@@ -1,1 +1,100 @@
-{}
+{
+    "material_defaults": {
+        "enabled": false,
+        "selected": "Select Material"
+    },
+    "manual_settings": {
+        "show_boxes": true,
+        "show_labels": true,
+        "label_positions": {
+            "top-left": true,
+            "top-right": false,
+            "bottom-left": false,
+            "bottom-right": false
+        },
+        "top_left_fields": {
+            "Time": {
+                "show": false,
+                "value": ""
+            },
+            "FA": {
+                "show": true,
+                "value": "0.8OD ND"
+            }
+        },
+        "top_right_fields": {
+            "FPS": {
+                "show": false,
+                "value": ""
+            },
+            "Running": {
+                "show": false,
+                "value": ""
+            },
+            "Output": {
+                "show": false,
+                "value": ""
+            },
+            "Illum": {
+                "show": true,
+                "value": "None"
+            },
+            "Shielding Gas": {
+                "show": true,
+                "value": "98% Ar 2% O2"
+            },
+            "Note": {
+                "show": false,
+                "value": ""
+            }
+        },
+        "bottom_left_fields": {
+            "Material": {
+                "show": true,
+                "value": "316SS"
+            },
+            "Job Number": {
+                "show": true,
+                "value": "60"
+            },
+            "Wire Feed Speed": {
+                "show": true,
+                "value": "220"
+            },
+            "Travel Speed": {
+                "show": true,
+                "value": "12"
+            }
+        },
+        "bottom_right_fields": {
+            "Camera": {
+                "show": true,
+                "value": "Basler acA800-200gc\n"
+            },
+            "Lens": {
+                "show": true,
+                "value": "C12-2524-25M-P\n"
+            },
+            "Viewing Angle": {
+                "show": true,
+                "value": "45"
+            },
+            "Focus": {
+                "show": true,
+                "value": "0.19"
+            },
+            "Aperature": {
+                "show": true,
+                "value": "16"
+            },
+            "Distance": {
+                "show": true,
+                "value": "150"
+            },
+            "CTWD (mm)": {
+                "show": true,
+                "value": "16"
+            }
+        }
+    }
+}

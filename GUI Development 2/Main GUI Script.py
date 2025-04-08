@@ -9,6 +9,7 @@ from Segmentation_Settings_GUI import SegmentationSettingsGUI
 from Recording_settings_GUI import RecordingsettingsGUI
 from Annotation_Settings_GUI import AnnotationSettingsGUI
 from Material_Defaults_GUI import MaterialDefaultsGUI
+from Graph_Settings_GUI import GraphSettingsGUI
 # Set theme and color
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -93,6 +94,9 @@ def open_annotation_settings():
     
 def open_material_defaults_settings():
     MaterialDefaultsGUI(window)
+
+def open_graph_settings():
+    GraphSettingsGUI(window)
     
 seg_settings_button = ctk.CTkButton(buttons_frame, 
                                   text="Segmentation Settings",
@@ -107,7 +111,7 @@ Annotation_settings_button = ctk.CTkButton(buttons_frame,
                                          command=open_annotation_settings)
 Annotation_settings_button.grid(row=0, column=2, padx=10, pady=5)
 
-Graph_settings_button = ctk.CTkButton(buttons_frame, text="Graph Settings")
+Graph_settings_button = ctk.CTkButton(buttons_frame, text="Graph Settings", command=open_graph_settings)
 Graph_settings_button.grid(row=0, column=3, padx=10, pady=5)
 
 Material_defaults_button = ctk.CTkButton(buttons_frame, text="Material Defaults", command=open_material_defaults_settings)
