@@ -3,6 +3,7 @@ from tkinter import ttk
 import json
 import os
 import customtkinter as ctk
+import easygui
 
 class RecordingsettingsGUI:
     def __init__(self,root):
@@ -103,7 +104,10 @@ class RecordingsettingsGUI:
             'et_step': self.et_step.get(),
             
             # RSI mode
-            'rsi_mode': self.rsi_mode.get()
+            'rsi_mode': self.rsi_mode.get(),
+            
+            # Save Location
+            'recording_save_location' : self.recording_save_location
         }
         
         try:
@@ -221,6 +225,14 @@ class RecordingsettingsGUI:
         
         RSI_integration_frame.pack(pady=10, padx=10, fill="both", expand=True)
         
+        # Select Folder Save Button
+        save_location_frame = ctk.CTkFrame(master=self.window)
+        save_location_label = ctk.CTkLabel(save_location_frame, text="Save Location", padx=5, pady=5)
+        save_location_label.pack()
+        save_location_frame.pack(fill="x",pady=5,padx=5)
+        
+        ctk.CTkButton(save_location_frame, text="Select Save Location", command=self.get_recording_save_location).pack(pady=10)
+        
         # Save Settings button - changed from grid to pack
         save_button = ctk.CTkButton(
             master=self.window, 
@@ -230,6 +242,11 @@ class RecordingsettingsGUI:
         )
         save_button.pack(pady=10, padx=10, fill="x")
 
+    def get_recording_save_location(self):
+        folder_path = easygui.diropenbox(title="Select Folder to Save Graphs To")
+        if folder_path:
+            self.recording_save_location = folder_path
+    
     # Setup closing function
     def on_closing(self):
         self.window.grab_release()  # Release the grab

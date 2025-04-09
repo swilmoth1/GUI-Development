@@ -1,7 +1,7 @@
 {
     "material_defaults": {
-        "enabled": false,
-        "selected": "Select Material"
+        "enabled": true,
+        "selected": "316SS"
     },
     "manual_settings": {
         "show_boxes": true,

@@ -4,6 +4,7 @@ import json
 import os
 import numpy as np
 from tkinter import ttk
+import easygui
 
 class GraphSettingsGUI:
     def __init__(self, root):
@@ -11,7 +12,7 @@ class GraphSettingsGUI:
         self.window = ctk.CTkToplevel(root)
         self.window.title("Graph Settings")
         self.graph_settings_file = "graph_settings.json"
-        
+        self.save_folder=os.getcwd()
         #Define chart groups and their metrics
         self.chart_groups = {
             "X Position Values": ["X Average", "X Maximum", "X Minimum"],
@@ -85,14 +86,30 @@ class GraphSettingsGUI:
         
         ctk.CTkCheckBox(save_frame, text="Save all charts after recording", variable=self.save_charts).pack(anchor="w",pady=5)
         
-        ctk.CTkButton(main_frame, text="Save Settings", command=self.save_settings).pack(pady=10)
+        # Select save location for charts
+        save_location_frame = ctk.CTkFrame(main_frame)
+        save_location_label = ctk.CTkLabel(save_location_frame, text="Save Location", padx=5, pady=5)
+        save_location_label.pack()
+        save_location_frame.pack(fill="x",pady=5,padx=5)
         
+        ctk.CTkButton(save_location_frame, text="Select Save Location", command=self.select_save_location).pack(pady=10)
+        
+        ctk.CTkButton(main_frame, text="Save Settings", command=self.save_settings).pack(pady=10)
+    
+    def select_save_location(self):
+        folder_path = easygui.diropenbox(title="Select Folder to Save Graphs To")
+        if folder_path:
+            self.save_folder = folder_path
+            
+    
+                
     def save_settings(self):
         settings = {
             "metrics": {metric: var.get() for metric, var in self.metrics.items()},
             "show_charts": {chart: var.get() for chart, var in self.show_charts.items()},
             "save_charts": self.save_charts.get(),
-            "chart_groups": self.chart_groups
+            "chart_groups": self.chart_groups,
+            "save_folder": self.save_folder
         }
         
         with open(self.graph_settings_file, 'w') as f:
