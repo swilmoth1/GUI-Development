@@ -46,7 +46,7 @@ class SegmentationSettingsGUI:
         ]
         self.data_file = "class_values.json"
         self.settings_file = "segmentation_settings.json"
-        self.materials_file = "material_presets.json"  # New file for material presets
+       
         
         # Segmentation settings
         self.apply_segmentation = ctk.BooleanVar(master=self.window, value=False)
@@ -89,10 +89,16 @@ class SegmentationSettingsGUI:
     def save_class_values(self):
         """Save class values to JSON file"""
         values_dict = {}
+        material_name = self.material_entry.get().strip()
+        if not material_name:
+            print("Please enter a material name")
+            return
+            
+        values_dict[material_name] = {}
         for class_name in self.classes:
-            values_dict[class_name] = {}
+            values_dict[material_name][class_name] = {}
             for field in self.fields:
-                values_dict[class_name][field] = {
+                values_dict[material_name][class_name][field] = {
                     "value": self.entries[class_name][field].get() or "0",
                     "pos_tolerance": self.entries[class_name][f"{field}_pos_tolerance"].get() or "0",
                     "neg_tolerance": self.entries[class_name][f"{field}_neg_tolerance"].get() or "0"
@@ -187,60 +193,82 @@ class SegmentationSettingsGUI:
     def load_preset(self, selected_preset):
         """Load values from selected material preset"""
         try:
-            with open(self.materials_file, 'r') as f:
+            with open(self.data_file, 'r') as f:
                 materials = json.load(f)
                 if selected_preset in materials:
+                    # Update material entry
+                    self.material_entry.delete(0, 'end')
+                    self.material_entry.insert(0, selected_preset)
+                    
+                    # Get preset data for the selected material
                     preset_data = materials[selected_preset]
-                    class_name = self.class_tabs.get()
-                    if class_name in self.entries:
-                        for field in self.fields:
-                            if field in preset_data:
-                                self.entries[class_name][field].delete(0, 'end')
-                                self.entries[class_name][field].insert(0, preset_data[field].get("value", "0"))
-                                self.entries[class_name][f"{field}_pos_tolerance"].delete(0, 'end')
-                                self.entries[class_name][f"{field}_pos_tolerance"].insert(0, preset_data[field].get("pos_tolerance", "0"))
-                                self.entries[class_name][f"{field}_neg_tolerance"].delete(0, 'end')
-                                self.entries[class_name][f"{field}_neg_tolerance"].insert(0, preset_data[field].get("neg_tolerance", "0"))
+                    
+                    # Update values for each class and field
+                    for class_name in self.classes:
+                        if class_name in preset_data:  # Check if class exists in preset
+                            class_data = preset_data[class_name]
+                            for field in self.fields:
+                                if field in class_data:  # Check if field exists in class data
+                                    # Update value
+                                    self.entries[class_name][field].delete(0, 'end')
+                                    self.entries[class_name][field].insert(0, class_data[field]["value"])
+                                    
+                                    # Update tolerances
+                                    self.entries[class_name][f"{field}_pos_tolerance"].delete(0, 'end')
+                                    self.entries[class_name][f"{field}_pos_tolerance"].insert(0, class_data[field]["pos_tolerance"])
+                                    
+                                    self.entries[class_name][f"{field}_neg_tolerance"].delete(0, 'end')
+                                    self.entries[class_name][f"{field}_neg_tolerance"].insert(0, class_data[field]["neg_tolerance"])
+                    
+                    print(f"Successfully loaded preset: {selected_preset}")
+                else:
+                    print(f"Preset {selected_preset} not found")
         except Exception as e:
             print(f"Error loading material preset: {e}")
 
     def save_as_material_preset(self):
         """Save current values as a material preset"""
-        dialog = ctk.CTkInputDialog(text="Enter material name:", title="Save Material Preset")
-        material_name = dialog.get_input()
-        if material_name:
+        material_name = self.material_entry.get().strip()
+        if not material_name:
+            print("Please enter a material name")
+            return
+            
+        try:
+            # Load existing materials or create new dict
             try:
-                # Load existing materials or create new dict
-                try:
-                    with open(self.materials_file, 'r') as f:
-                        materials = json.load(f)
-                except (FileNotFoundError, json.JSONDecodeError):
-                    materials = {}
-                
-                # Save current values as material preset
-                materials[material_name] = {}
-                class_name = self.class_tabs.get()
+                with open(self.data_file, 'r') as f:
+                    materials = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                materials = {}
+            
+            # Save current values as material preset
+            materials[material_name] = {}
+            for class_name in self.classes:
                 if class_name in self.entries:
-                    materials[material_name] = {
-                        field: {
+                    for field in self.fields:
+                        if field not in materials[material_name]:
+                            materials[material_name][field] = {}
+                        materials[material_name][field] = {
                             "value": self.entries[class_name][field].get(),
                             "pos_tolerance": self.entries[class_name][f"{field}_pos_tolerance"].get(),
                             "neg_tolerance": self.entries[class_name][f"{field}_neg_tolerance"].get()
-                        } for field in self.fields
-                    }
-                
-                with open(self.materials_file, 'w') as f:
-                    json.dump(materials, f, indent=4)
-                
-                # Update preset menu
-                self.update_preset_menu()
-            except Exception as e:
-                print(f"Error saving material preset: {e}")
+                        }
+            
+            with open(self.data_file, 'w') as f:
+                json.dump(materials, f, indent=4)
+            
+            # Update preset menu
+            self.update_preset_menu()
+            # Set the current selection to the saved material
+            self.preset_var.set(material_name)
+            
+        except Exception as e:
+            print(f"Error saving material preset: {e}")
 
     def update_preset_menu(self):
         """Update the preset menu with available materials"""
         try:
-            with open(self.materials_file, 'r') as f:
+            with open(self.data_file, 'r') as f:
                 materials = json.load(f)
                 preset_names = list(materials.keys())
         except (FileNotFoundError, json.JSONDecodeError):
@@ -259,6 +287,14 @@ class SegmentationSettingsGUI:
         
         preset_label = ctk.CTkLabel(preset_frame, text="Load Preset:", font=("Arial", 12, "bold"))
         preset_label.pack(side="left", padx=5)
+        
+        # Add Material Selection menu below preset selection
+        material_selection_frame = ctk.CTkFrame(main_frame)
+        material_selection_label = ctk.CTkLabel(material_selection_frame, text="Material:", font=("Arial", 12, "bold"))
+        material_selection_label.pack(side="left",padx=5)
+        material_selection_frame.pack(fill="x",padx=10,pady=5)
+        self.material_entry = ctk.CTkEntry(material_selection_frame, width=100)
+        self.material_entry.pack(padx=10,pady=10)
         
         # Initialize empty preset menu
         self.preset_var = ctk.StringVar(value="Select Material")
