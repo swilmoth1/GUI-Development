@@ -13,12 +13,16 @@ from Annotation_Settings_GUI import AnnotationSettingsGUI
 from Material_Defaults_GUI import MaterialDefaultsGUI
 from Graph_Settings_GUI import GraphSettingsGUI
 from PIL import Image, ImageTk
+from collections import deque
+import time
+
 # Set theme and color
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # Configuration
-NUM_GRAPHS = 4  # Change this number to adjust the number of graphs
+NUM_GRAPHS = 5  # Updated to 5 graphs
+HISTORY_LENGTH = 100  # Number of frames to show in history
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 DEFAULT_IMG = os.path.join(ASSETS_DIR, "placeholder.png")
 
@@ -305,38 +309,129 @@ def draw_image_previews_from_json_selection(recording_settings):
                 
 draw_video_previews_from_json_selection(recording_settings)
 draw_image_previews_from_json_selection(recording_settings)
-# Add Graphical Viewing Field with fixed minimum size
-graph_frame = ctk.CTkFrame(master=window)
-graph_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
-graph_frame.grid_columnconfigure(0, weight=1)
-graph_frame.grid_rowconfigure(0, weight=0)  # Title row doesn't expand
-graph_frame.grid_rowconfigure(1, weight=1)  # Content row expands
-graph_frame.grid_propagate(False)  # Prevent frame from shrinking
-graph_frame.configure(height=400)  # Set minimum height
 
-graph_title = ctk.CTkLabel(graph_frame, text="Graphs", font=("Arial", 12, "bold"))
-graph_title.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+# # Add Graphical Viewing Field with fixed minimum size
+# graph_frame = ctk.CTkFrame(master=window)
+# graph_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
+# graph_frame.grid_columnconfigure(0, weight=1)
+# graph_frame.grid_rowconfigure(0, weight=0)  # Title row doesn't expand
+# graph_frame.grid_rowconfigure(1, weight=1)  # Content row expands
+# graph_frame.grid_propagate(False)  # Prevent frame from shrinking
+# graph_frame.configure(height=400)  # Set minimum height
 
-# Calculate grid layout for graphs
-num_cols = min(3, NUM_GRAPHS)  # Maximum 3 graphs per row
-num_rows = math.ceil(NUM_GRAPHS / num_cols)
+# graph_title = ctk.CTkLabel(graph_frame, text="Graphs", font=("Arial", 12, "bold"))
+# graph_title.grid(row=0, column=0, sticky="w", padx=10, pady=5)
 
-# Create a figure with fixed size
-fig, axes = plt.subplots(num_rows, num_cols, figsize=(12, 6))  # Fixed figure size
-canvas = FigureCanvasTkAgg(fig, master=graph_frame)
-canvas.get_tk_widget().grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+# # Load settings from graphical json
+# show_charts = graph_settings.get("show_charts", {})
+# chart_groups = graph_settings.get("chart_groups", {})
+# metrics = graph_settings.get("metrics",{})
 
-# Flatten axes array if multiple rows/columns
-if NUM_GRAPHS > 1:
-    axes = axes.flatten()
+# chart_container = ctk.CTkFrame(graph_frame)
+# chart_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+# chart_container.grid_columnconfigure((0, 1, 2), weight=1)
+# chart_container.grid_rowconfigure((0, 1), weight=1)
 
-# Remove extra subplots if any
-if NUM_GRAPHS > 1:
-    for i in range(NUM_GRAPHS, len(axes)):
-        fig.delaxes(axes[i])
+# # Dummy data — replace with real values
+# dummy_data = {
+#     "X Average": [1, 2, 3],
+#     "X Maximum": [2, 3, 4],
+#     "X Minimum": [0, 1, 2],
+#     "Y Average": [4, 5, 6],
+#     "Y Maximum": [6, 7, 8],
+#     "Y Minimum": [2, 3, 4],
+#     "X Average Standard Deviation": [0.1, 0.2, 0.15],
+#     "Y Average Standard Deviation": [0.2, 0.3, 0.25],
+#     "Class Area": [10, 15, 20],
+#     "Class Area Standard Deviation": [1, 1.5, 2]
+# }
 
-fig.tight_layout()
-canvas.draw()
+
+# # Set thresholds with separate positive and negative tolerances
+# thresholds = {
+#     "X Average": 2,  # Example threshold for X Average
+#     "Y Average": 5,  # Example threshold for Y Average
+# }
+
+# # Set positive and negative tolerances for each metric
+# positive_tolerances = {
+#     "X Average": 0.5,  # Positive tolerance for X Average
+#     "Y Average": 0.3,  # Positive tolerance for Y Average
+# }
+
+# negative_tolerances = {
+#     "X Average": 0.2,  # Negative tolerance for X Average
+#     "Y Average": 0.4,  # Negative tolerance for Y Average
+# }
+
+
+# # Set the initial row and column positions for the grid layout
+# row = 1
+# col = 0
+
+# # Create subplots based on visible charts
+# visible_charts = [(name, chart_groups[name]) for name, show in show_charts.items() if show and name in chart_groups]
+# n = len(visible_charts)
+
+# if n == 0:
+#     # If no charts are selected, show a message
+#     no_graph_label = ctk.CTkLabel(graph_frame, text="No charts selected.")
+#     no_graph_label.grid(row=1, column=0)
+# else:
+#     # 3 columns, 2 rows grid layout
+#     cols = 3
+#     rows = 2
+
+#     fig, axs = plt.subplots(rows, cols, figsize=(cols * 5, rows * 3.5))
+#     axs = axs.flatten()  # Flatten in case we have a 2D array of axes
+
+#     # Loop through and create the graphs
+#     for i, (title, metric_keys) in enumerate(visible_charts):
+#         ax = axs[i]
+        
+#         for metric in metric_keys:
+#             if metrics.get(metric, False):
+#                 ax.plot(dummy_data.get(metric, []), label=metric)
+                
+#                 # If a threshold is defined for the metric, add shaded areas for positive and negative tolerance
+#                 if metric in thresholds:
+#                     threshold = thresholds[metric]
+#                     pos_tol = positive_tolerances.get(metric, 0)
+#                     neg_tol = negative_tolerances.get(metric, 0)
+
+#                     # Plot shaded area for positive tolerance (green)
+#                     ax.fill_between(range(len(dummy_data.get(metric, []))),
+#                                     threshold, threshold + pos_tol,
+#                                     color='green', alpha=0.3, label=f"{metric} + tolerance")
+                    
+#                     # Plot shaded area for negative tolerance (red)
+#                     ax.fill_between(range(len(dummy_data.get(metric, []))),
+#                                     threshold, threshold - neg_tol,
+#                                     color='red', alpha=0.3, label=f"{metric} - tolerance")
+
+#         ax.set_title(title)
+#         ax.legend(fontsize="small")
+#         ax.grid(True)
+
+#     # Hide unused subplots if there are fewer than 6 charts
+#     for ax in axs[n:]:
+#         ax.axis("off")
+
+#     fig.tight_layout()
+
+#     # Embed the figure in the existing graph_frame
+#     canvas = FigureCanvasTkAgg(fig, master=graph_frame)
+#     canvas_widget = canvas.get_tk_widget()
+#     canvas_widget.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+            
+            
+
+
+
+
+
+
+
 
 #run
 window.mainloop()
