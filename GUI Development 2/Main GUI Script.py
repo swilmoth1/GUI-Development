@@ -5,17 +5,58 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import math
+import os
+import json
 from Segmentation_Settings_GUI import SegmentationSettingsGUI
 from Recording_settings_GUI import RecordingsettingsGUI
 from Annotation_Settings_GUI import AnnotationSettingsGUI
 from Material_Defaults_GUI import MaterialDefaultsGUI
 from Graph_Settings_GUI import GraphSettingsGUI
+from PIL import Image, ImageTk
 # Set theme and color
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # Configuration
 NUM_GRAPHS = 4  # Change this number to adjust the number of graphs
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
+DEFAULT_IMG = os.path.join(ASSETS_DIR, "placeholder.png")
+
+# Ensure assets directory exists
+if not os.path.exists(ASSETS_DIR):
+    os.makedirs(ASSETS_DIR)
+
+image_paths = {
+    "video_raw": os.path.join(ASSETS_DIR, "Sample Raw Image.png"),
+    "video_annotated": os.path.join(ASSETS_DIR, "Sample Annotated Image.png"),
+    "video_segmented": os.path.join(ASSETS_DIR, "Sample Segmented Image.png"),
+    "image_raw": os.path.join(ASSETS_DIR, "Sample Raw Image.png"),
+    "image_annotated": os.path.join(ASSETS_DIR, "Sample Annotated Image.png"),
+    "image_segmented": os.path.join(ASSETS_DIR, "Sample Segmented Image.png")
+}
+
+def load_image_preview(path, size=(160,120)):
+    try:
+        # Try to load specified image
+        img = Image.open(path)
+    except Exception as e:
+        print(f"Error loading image {path}: {e}")
+        # Create a blank placeholder if image doesn't exist
+        img = Image.new('RGB', size, color='gray')
+        # Add text to indicate placeholder
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(img)
+        draw.text((10, size[1]//2), "No Preview", fill='white')
+        # Save placeholder for future use
+        img.save(path)
+    
+    try:
+        img = img.resize(size, Image.Resampling.LANCZOS)
+    except Exception as e:
+        print(f"Error resizing image: {e}")
+        img = img.resize(size, Image.NEAREST)
+        
+    return ctk.CTkImage(light_image=img, dark_image=img, size=size)
 
 def on_closing():
     """Handle cleanup when main window is closed"""
@@ -87,7 +128,7 @@ def open_segmentation_settings():
     SegmentationSettingsGUI(window)
 
 def open_recording_settings():
-    RecordingsettingsGUI(window)
+    RecordingsettingsGUI(window, callback=update_gui_from_settings)
     
 def open_annotation_settings():
     AnnotationSettingsGUI(window)
@@ -98,6 +139,7 @@ def open_material_defaults_settings():
 def open_graph_settings():
     GraphSettingsGUI(window)
     
+
 seg_settings_button = ctk.CTkButton(buttons_frame, 
                                   text="Segmentation Settings",
                                   command=open_segmentation_settings)
@@ -140,6 +182,44 @@ record_button = ctk.CTkButton(buttons_frame,
                              height=50)
 record_button.grid(row=0, column=5, padx=20, pady=10, sticky="ew")
 
+###### LOAD SETTINGS FROM BUTTON SELECTIONS
+
+#read the json file for the Graph Settings
+if os.path.exists("graph_settings.json"):
+    with open("graph_settings.json", 'r') as f:
+        graph_settings = json.load(f)
+
+if os.path.exists("annotation_settings.json"):
+    with open("annotation_settings.json", 'r') as f:
+        annotation_settings = json.load(f)
+
+if os.path.exists("class_values.json"):
+    with open("class_values.json", 'r') as f:
+        class_values = json.load(f)
+
+if os.path.exists("material_defaults.json"):
+    with open("material_defaults.json", 'r') as f:
+        material_defaults = json.load(f)
+
+if os.path.exists("recording_settings.json"):
+    with open("recording_settings.json", 'r') as f:
+        recording_settings = json.load(f)
+
+def update_gui_from_settings():
+    """Update GUI elements based on latest settings"""
+    # Clear existing previews
+    for widget in image_frame.winfo_children():
+        widget.destroy()
+    
+    # Reload settings
+    if os.path.exists("recording_settings.json"):
+        with open("recording_settings.json", 'r') as f:
+            recording_settings = json.load(f)
+    
+    # Add image viewing field to display image if the setting is selected
+    draw_video_previews_from_json_selection(recording_settings)
+    draw_image_previews_from_json_selection(recording_settings)
+
 # Add Image Viewing Field with fixed minimum size
 image_frame = ctk.CTkFrame(master=window)
 image_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
@@ -152,6 +232,79 @@ image_frame.configure(height=400)  # Set minimum height
 image_title = ctk.CTkLabel(image_frame, text="Images", font=("Arial", 12, "bold"))
 image_title.grid(row=0, column=0, sticky="w", padx=10, pady=5)
 
+
+def draw_video_previews_from_json_selection(recording_settings):
+    # Add image viewing field to display image if the setting is selected in the submenu.
+    preview_row = 1
+    preview_col = 0
+    i=1
+    
+    for key in ["video_raw", "video_annotated", "video_segmented"]:
+        if recording_settings.get(key):
+            try:
+                image_frame.grid_columnconfigure(i, weight=1)
+                # Load and resize image with proper parameters
+                img = Image.open(image_paths[key])
+                # img = img.resize((650, 450), Image.Resampling.LANCZOS)  # Fixed resize parameters
+                photo_img = ImageTk.PhotoImage(img)
+
+                # Create a sub-frame to hold image + label
+                preview_frame = ctk.CTkFrame(master=image_frame)
+                preview_frame.grid(row=preview_row, column=preview_col, padx=10, pady=10)
+
+                # Image label (no text)
+                photo_img = ctk.CTkImage(light_image=img, size=(550,400))  # auto-resizes
+
+                img_label = ctk.CTkLabel(master=preview_frame, image=photo_img, text="")
+                img_label.pack()
+
+                # Text label underneath
+                text = key.replace("_", " ").title()
+                text_label = ctk.CTkLabel(master=preview_frame, text=text)
+                text_label.pack(pady=(5, 0))
+
+                preview_col += 1
+                i += 1 
+            except Exception as e:
+                print(f"Error loading {key} preview:", e)
+                
+def draw_image_previews_from_json_selection(recording_settings):
+    # Add image viewing field to display image if the setting is selected in the submenu.
+    preview_row = 1
+    preview_col = 0
+    i=1
+    
+    for key in ["image_raw", "image_annotated", "image_segmented"]:
+        if recording_settings.get(key):
+            try:
+                image_frame.grid_columnconfigure(i, weight=1)
+                # Load and resize image with proper parameters
+                img = Image.open(image_paths[key])
+                # img = img.resize((650, 450), Image.Resampling.LANCZOS)  # Fixed resize parameters
+                photo_img = ImageTk.PhotoImage(img)
+
+                # Create a sub-frame to hold image + label
+                preview_frame = ctk.CTkFrame(master=image_frame)
+                preview_frame.grid(row=preview_row, column=preview_col, padx=10, pady=10)
+
+                # Image label (no text)
+                photo_img = ctk.CTkImage(light_image=img, size=(550,400))  # auto-resizes
+
+                img_label = ctk.CTkLabel(master=preview_frame, image=photo_img, text="")
+                img_label.pack()
+
+                # Text label underneath
+                text = key.replace("_", " ").title()
+                text_label = ctk.CTkLabel(master=preview_frame, text=text)
+                text_label.pack(pady=(5, 0))
+
+                preview_col += 1
+                i += 1 
+            except Exception as e:
+                print(f"Error loading {key} preview:", e)
+                
+draw_video_previews_from_json_selection(recording_settings)
+draw_image_previews_from_json_selection(recording_settings)
 # Add Graphical Viewing Field with fixed minimum size
 graph_frame = ctk.CTkFrame(master=window)
 graph_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)

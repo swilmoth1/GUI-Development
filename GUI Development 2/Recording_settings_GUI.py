@@ -6,8 +6,9 @@ import customtkinter as ctk
 import easygui
 
 class RecordingsettingsGUI:
-    def __init__(self,root):
+    def __init__(self, root, callback=None):
         self.root = root
+        self.callback = callback
         self.settings_file = "recording_settings.json"
         
         #create settings window
@@ -53,6 +54,9 @@ class RecordingsettingsGUI:
         
         # RSI mode setting
         self.rsi_mode = ctk.StringVar(value="Manual")
+        
+        # Initialize recording save location
+        self.recording_save_location = ctk.StringVar(value="")
 
     def load_settings(self):
         """Load settings from JSON file"""
@@ -77,6 +81,9 @@ class RecordingsettingsGUI:
                     self.et_start.set(settings.get('et_start', '1000'))
                     self.et_end.set(settings.get('et_end', '10000'))
                     self.et_step.set(settings.get('et_step', '1000'))
+                    
+                    # Load save location
+                    self.recording_save_location.set(settings.get('recording_save_location', False))
                     
                     # Load RSI mode
                     self.rsi_mode.set(settings.get('rsi_mode', 'Manual'))
@@ -107,12 +114,14 @@ class RecordingsettingsGUI:
             'rsi_mode': self.rsi_mode.get(),
             
             # Save Location
-            'recording_save_location' : self.recording_save_location
+            'recording_save_location': self.recording_save_location.get()
         }
         
         try:
             with open(self.settings_file, 'w') as f:
                 json.dump(settings, f, indent=4)
+            if self.callback:
+                self.callback()  # Call the update callback
             self.window.destroy()
         except Exception as e:
             print(f"Error saving settings: {e}")
@@ -243,9 +252,9 @@ class RecordingsettingsGUI:
         save_button.pack(pady=10, padx=10, fill="x")
 
     def get_recording_save_location(self):
-        folder_path = easygui.diropenbox(title="Select Folder to Save Graphs To")
+        folder_path = easygui.diropenbox(title="Select Folder to Save Recordings To")
         if folder_path:
-            self.recording_save_location = folder_path
+            self.recording_save_location.set(folder_path)
     
     # Setup closing function
     def on_closing(self):

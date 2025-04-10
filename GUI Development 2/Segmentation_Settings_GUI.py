@@ -46,11 +46,11 @@ class SegmentationSettingsGUI:
         ]
         self.data_file = "class_values.json"
         self.settings_file = "segmentation_settings.json"
-       
         
-        # Segmentation settings
+        # Initialize all possible settings attributes
         self.apply_segmentation = ctk.BooleanVar(master=self.window, value=False)
         self.compare_values = ctk.BooleanVar(master=self.window, value=False)
+        self.compare_checkbox = None  # Will be initialized later in init_segmentation_tab
         
         # Initialize empty values
         self.default_values = {}
@@ -170,15 +170,23 @@ class SegmentationSettingsGUI:
             
 
     def load_settings(self):
+        """Load segmentation-specific settings"""
         try:
+            if not os.path.exists(self.settings_file):
+                return  # Use default values if file doesn't exist
+                
             with open(self.settings_file, 'r') as f:
                 settings = json.load(f)
-                self.apply_segmentation.set(settings.get("apply_segmentation", False))
-                self.compare_values.set(settings.get("compare_values", False))
-        except (FileNotFoundError, json.JSONDecodeError):
-            # If file doesn't exist or is invalid, use defaults
-            self.apply_segmentation.set(False)
-            self.compare_values.set(False)
+                
+            # Only load segmentation-specific settings
+            if "apply_segmentation" in settings:
+                self.apply_segmentation.set(bool(settings["apply_segmentation"]))
+            if "compare_values" in settings:
+                self.compare_values.set(bool(settings["compare_values"]))
+                
+        except Exception as e:
+            print(f"Error loading segmentation settings: {e}")
+            # Keep default values on error
 
     def validate_entry(self, value):
         """Validate numeric entry"""

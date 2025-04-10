@@ -1,24 +1,24 @@
 {
     "metrics": {
-        "X Average": false,
-        "X Maximum": false,
-        "X Minimum": false,
-        "Y Average": false,
-        "Y Maximum": false,
-        "Y Minimum": false,
-        "X Average Standard Deviation": false,
-        "Y Average Standard Deviation": false,
-        "Class Area": false,
-        "Class Area Standard Deviation": false
+        "X Average": true,
+        "X Maximum": true,
+        "X Minimum": true,
+        "Y Average": true,
+        "Y Maximum": true,
+        "Y Minimum": true,
+        "X Average Standard Deviation": true,
+        "Y Average Standard Deviation": true,
+        "Class Area": true,
+        "Class Area Standard Deviation": true
     },
     "show_charts": {
-        "X Position Values": false,
-        "Y Position Values": false,
-        "Position Standard Deviations": false,
-        "Class Area": false,
-        "Class Area Standard Deviation": false
+        "X Position Values": true,
+        "Y Position Values": true,
+        "Position Standard Deviations": true,
+        "Class Area": true,
+        "Class Area Standard Deviation": true
     },
-    "save_charts": false,
+    "save_charts": true,
     "chart_groups": {
         "X Position Values": [
             "X Average",
@@ -41,5 +41,5 @@
             "Class Area Standard Deviation"
         ]
     },
-    "save_folder": "C:\\Users\\swilmoth\\OneDrive - University of Tennessee\\Basler Research\\Experiment Frames\\White Letters"
+    "save_folder": "C:\\Users\\swilmoth\\Documents\\GitHub\\GUI-Development"
 }
