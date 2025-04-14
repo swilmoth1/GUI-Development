@@ -2,9 +2,167 @@
     "316SS": {
         "Welding Wire": {
             "x_min": {
-                "value": "1",
-                "pos_tolerance": "1",
-                "neg_tolerance": "1"
+                "value": "20",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_max": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_min": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_max": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "area_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "area_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_avg_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_avg_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            }
+        },
+        "Solidification Zone": {
+            "x_min": {
+                "value": "10",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_max": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_min": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_max": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_average": {
+                "value": "10",
+                "pos_tolerance": "20",
+                "neg_tolerance": "30"
+            },
+            "area_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "area_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_avg_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_avg_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            }
+        },
+        "Arc Flash": {
+            "x_min": {
+                "value": "10",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_max": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_min": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_max": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "area_average": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "area_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "y_avg_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            },
+            "x_avg_std_deviation": {
+                "value": "0",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
+            }
+        }
+    },
+    "410SS": {
+        "Welding Wire": {
+            "x_min": {
+                "value": "20",
+                "pos_tolerance": "0",
+                "neg_tolerance": "0"
             },
             "x_max": {
                 "value": "0",

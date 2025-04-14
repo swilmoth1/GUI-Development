@@ -5,8 +5,9 @@ import os
 import customtkinter as ctk
 
 class SegmentationSettingsGUI:
-    def __init__(self, root):
+    def __init__(self, root, callback=None):
         self.root = root
+        self.callback = callback
         # Create settings window
         self.window = ctk.CTkToplevel(root)
         self.window.title("Segmentation Settings")
@@ -33,6 +34,9 @@ class SegmentationSettingsGUI:
         # Setup initial variables
         self.setup_variables()
         self.load_settings()  # Load saved settings if they exist
+        
+        # Load available presets at initialization
+        self.available_presets = self.get_available_presets()
         
         # Initialize tabs
         self.init_segmentation_tab()
@@ -88,32 +92,40 @@ class SegmentationSettingsGUI:
 
     def save_class_values(self):
         """Save class values to JSON file"""
-        values_dict = {}
         material_name = self.material_entry.get().strip()
         if not material_name:
             print("Please enter a material name")
             return
             
-        values_dict[material_name] = {}
-        for class_name in self.classes:
-            values_dict[material_name][class_name] = {}
-            for field in self.fields:
-                values_dict[material_name][class_name][field] = {
-                    "value": self.entries[class_name][field].get() or "0",
-                    "pos_tolerance": self.entries[class_name][f"{field}_pos_tolerance"].get() or "0",
-                    "neg_tolerance": self.entries[class_name][f"{field}_neg_tolerance"].get() or "0"
-                }
-        
         try:
+            # Load existing materials first
+            existing_materials = {}
+            if os.path.exists(self.data_file):
+                with open(self.data_file, 'r') as f:
+                    existing_materials = json.load(f)
+            
+            # Add new material values to existing ones
+            existing_materials[material_name] = {}
+            for class_name in self.classes:
+                existing_materials[material_name][class_name] = {}
+                for field in self.fields:
+                    existing_materials[material_name][class_name][field] = {
+                        "value": self.entries[class_name][field].get() or "0",
+                        "pos_tolerance": self.entries[class_name][f"{field}_pos_tolerance"].get() or "0",
+                        "neg_tolerance": self.entries[class_name][f"{field}_neg_tolerance"].get() or "0"
+                    }
+            
             # Ensure directory exists
             os.makedirs(os.path.dirname(os.path.abspath(self.data_file)), exist_ok=True)
             
-            # Save to file
+            # Save all materials back to file
             with open(self.data_file, 'w') as f:
-                json.dump(values_dict, f, indent=4)
+                json.dump(existing_materials, f, indent=4)
             
             print(f"Values saved successfully to {self.data_file}")
-            self.window.destroy()  # Destroy the window
+            if self.callback:
+                self.callback()
+            self.window.destroy()
         except Exception as e:
             print(f"Error saving class values: {e}")
 
@@ -273,16 +285,34 @@ class SegmentationSettingsGUI:
         except Exception as e:
             print(f"Error saving material preset: {e}")
 
+    def get_available_presets(self):
+        """Get list of available presets from class_values.json"""
+        try:
+            if os.path.exists(self.data_file):
+                with open(self.data_file, 'r') as f:
+                    materials = json.load(f)
+                    return list(materials.keys())
+        except Exception as e:
+            print(f"Error loading presets: {e}")
+        return []
+
     def update_preset_menu(self):
         """Update the preset menu with available materials"""
         try:
-            with open(self.data_file, 'r') as f:
-                materials = json.load(f)
-                preset_names = list(materials.keys())
-        except (FileNotFoundError, json.JSONDecodeError):
-            preset_names = []
-        
-        self.preset_menu.configure(values=preset_names)
+            # Get fresh list of presets
+            preset_names = self.get_available_presets()
+            
+            # Update the menu with current presets
+            if preset_names:
+                self.preset_menu.configure(values=preset_names)
+                if self.preset_var.get() not in preset_names:
+                    self.preset_var.set(preset_names[0])
+            else:
+                self.preset_menu.configure(values=["No presets available"])
+                self.preset_var.set("No presets available")
+                
+        except Exception as e:
+            print(f"Error updating preset menu: {e}")
 
     def init_class_values_tab(self):
         # Create main frame for class values
@@ -293,38 +323,42 @@ class SegmentationSettingsGUI:
         preset_frame = ctk.CTkFrame(main_frame)
         preset_frame.pack(fill="x", padx=10, pady=5)
         
+        # Use grid for preset selection
         preset_label = ctk.CTkLabel(preset_frame, text="Load Preset:", font=("Arial", 12, "bold"))
-        preset_label.pack(side="left", padx=5)
+        preset_label.grid(row=0, column=0, padx=5, pady=5)
         
-        # Add Material Selection menu below preset selection
-        material_selection_frame = ctk.CTkFrame(main_frame)
-        material_selection_label = ctk.CTkLabel(material_selection_frame, text="Material:", font=("Arial", 12, "bold"))
-        material_selection_label.pack(side="left",padx=5)
-        material_selection_frame.pack(fill="x",padx=10,pady=5)
-        self.material_entry = ctk.CTkEntry(material_selection_frame, width=100)
-        self.material_entry.pack(padx=10,pady=10)
-        
-        # Initialize empty preset menu
         self.preset_var = ctk.StringVar(value="Select Material")
+        initial_values = self.available_presets if self.available_presets else ["No presets available"]
         self.preset_menu = ctk.CTkOptionMenu(
             preset_frame,
-            values=[],  # Start with empty list
+            values=initial_values,
             command=self.load_preset,
             variable=self.preset_var
         )
-        self.preset_menu.pack(side="left", padx=5)
+        self.preset_menu.grid(row=0, column=1, padx=5, pady=5)
         
-        # Add save as material preset button
+        # Material Selection section using grid
+        material_selection_frame = ctk.CTkFrame(main_frame)
+        material_selection_frame.pack(fill="x", padx=10, pady=5)
+        
+        material_selection_label = ctk.CTkLabel(material_selection_frame, 
+                                              text="Material:", 
+                                              font=("Arial", 12, "bold"))
+        material_selection_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        self.material_entry = ctk.CTkEntry(material_selection_frame, width=100)
+        self.material_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        
         save_preset_button = ctk.CTkButton(
-            preset_frame,
+            material_selection_frame,
             text="Save as Material Preset",
             command=self.save_as_material_preset,
             font=("Arial", 12)
         )
-        save_preset_button.pack(side="right", padx=5)
+        save_preset_button.grid(row=0, column=2, padx=5, pady=5, sticky="e")
         
-        # Update preset menu with any existing materials
-        self.update_preset_menu()
+        # Configure grid weights
+        material_selection_frame.grid_columnconfigure(1, weight=1)
 
         # Create nested tabview for classes
         self.class_tabs = ctk.CTkTabview(main_frame)
@@ -383,6 +417,7 @@ class SegmentationSettingsGUI:
             command=self.save_class_values,
             font=("Arial", 12, "bold")
         )
+        self.callback()
         save_button.pack(pady=10)
 
     def on_closing(self):

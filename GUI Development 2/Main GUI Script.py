@@ -15,6 +15,9 @@ from Graph_Settings_GUI import GraphSettingsGUI
 from PIL import Image, ImageTk
 from collections import deque
 import time
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 
 # Set theme and color
 ctk.set_appearance_mode("dark")
@@ -104,87 +107,9 @@ window.grid_rowconfigure(0, weight=1)  # Control panel gets 1 part
 control_frame = ctk.CTkFrame(master=window)
 control_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
 control_frame.grid_columnconfigure(0, weight=4)  # Main buttons section gets more space
-control_frame.grid_columnconfigure(1, weight=1)  # Status section gets less space
+#control_frame.grid_columnconfigure(1, weight=1)  # Status section gets less space
 control_title = ctk.CTkLabel(control_frame, text="Control Panel", font=("Arial", 12, "bold"))
 control_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=5)
-
-# Update status frame position with larger size
-status_frame = ctk.CTkFrame(control_frame)
-status_frame.grid(row=1, column=1, padx=20, pady=10, sticky="ne")
-
-status_label = ctk.CTkLabel(status_frame, 
-                           text="Status:", 
-                           font=("Arial", 14, "bold"))
-status_label.grid(row=0, column=0, padx=15, pady=10)
-
-status_value = ctk.CTkLabel(status_frame, 
-                           text="Idle", 
-                           font=("Arial", 16, "bold"),
-                           text_color="yellow")
-status_value.grid(row=0, column=1, padx=15, pady=10)
-
-# Buttons in Control Panel (stays in column 0)
-buttons_frame = ctk.CTkFrame(control_frame)
-buttons_frame.grid(row=1, column=0, padx=10, pady=5, sticky="w")
-
-###############
-def open_segmentation_settings():
-    SegmentationSettingsGUI(window)
-
-def open_recording_settings():
-    RecordingsettingsGUI(window, callback=update_gui_from_settings)
-    
-def open_annotation_settings():
-    AnnotationSettingsGUI(window)
-    
-def open_material_defaults_settings():
-    MaterialDefaultsGUI(window)
-
-def open_graph_settings():
-    GraphSettingsGUI(window)
-    
-
-seg_settings_button = ctk.CTkButton(buttons_frame, 
-                                  text="Segmentation Settings",
-                                  command=open_segmentation_settings)
-seg_settings_button.grid(row=0, column=0, padx=10, pady=5)
-
-recording_settings_button = ctk.CTkButton(buttons_frame, text="Recording Settings", command=open_recording_settings)
-recording_settings_button.grid(row=0, column=1, padx=10, pady=5)
-
-Annotation_settings_button = ctk.CTkButton(buttons_frame, 
-                                         text="Annotation Settings",
-                                         command=open_annotation_settings)
-Annotation_settings_button.grid(row=0, column=2, padx=10, pady=5)
-
-Graph_settings_button = ctk.CTkButton(buttons_frame, text="Graph Settings", command=open_graph_settings)
-Graph_settings_button.grid(row=0, column=3, padx=10, pady=5)
-
-Material_defaults_button = ctk.CTkButton(buttons_frame, text="Material Defaults", command=open_material_defaults_settings)
-Material_defaults_button.grid(row=0, column=4, padx=10, pady=5)
-###############
-
-def toggle_recording():
-    current_text = record_button.cget("text")
-    if current_text == "Start Recording":
-        record_button.configure(text="Stop Recording", 
-                              fg_color="red",
-                              hover_color="dark red")
-    else:
-        record_button.configure(text="Start Recording", 
-                              fg_color="green",
-                              hover_color="dark green")
-
-# Replace the record button section with:
-record_button = ctk.CTkButton(buttons_frame, 
-                             text="Start Recording",
-                             command=toggle_recording,
-                             font=("Arial", 16, "bold"),
-                             fg_color="green",
-                             hover_color="dark green",
-                             width=200,
-                             height=50)
-record_button.grid(row=0, column=5, padx=20, pady=10, sticky="ew")
 
 ###### LOAD SETTINGS FROM BUTTON SELECTIONS
 
@@ -209,6 +134,84 @@ if os.path.exists("recording_settings.json"):
     with open("recording_settings.json", 'r') as f:
         recording_settings = json.load(f)
 
+# Buttons in Control Panel (stays in column 0)
+buttons_frame = ctk.CTkFrame(control_frame)
+buttons_frame.grid(row=1, column=0, padx=10, pady=5, sticky="w")
+
+###############
+def open_segmentation_settings():
+    SegmentationSettingsGUI(window, callback = update_class_values)
+
+def open_recording_settings():
+    RecordingsettingsGUI(window, callback=update_gui_from_settings)
+    
+def open_annotation_settings():
+    AnnotationSettingsGUI(window)
+    
+def open_material_defaults_settings():
+    MaterialDefaultsGUI(window)
+
+def open_graph_settings():
+    GraphSettingsGUI(window)
+
+def set_material_defaults(choice=None):
+    if choice == "Select Material":
+        return
+    else:
+        material_selection = choice
+
+seg_settings_button = ctk.CTkButton(buttons_frame, 
+                                  text="Segmentation Settings",
+                                  command=open_segmentation_settings)
+seg_settings_button.grid(row=0, column=0, padx=10, pady=5)
+
+recording_settings_button = ctk.CTkButton(buttons_frame, text="Recording Settings", command=open_recording_settings)
+recording_settings_button.grid(row=0, column=1, padx=10, pady=5)
+
+Annotation_settings_button = ctk.CTkButton(buttons_frame, 
+                                         text="Annotation Settings",
+                                         command=open_annotation_settings)
+Annotation_settings_button.grid(row=0, column=2, padx=10, pady=5)
+
+Graph_settings_button = ctk.CTkButton(buttons_frame, text="Graph Settings", command=open_graph_settings)
+Graph_settings_button.grid(row=0, column=3, padx=10, pady=5)
+
+Material_defaults_button = ctk.CTkButton(buttons_frame, text="Material Defaults", command=open_material_defaults_settings)
+Material_defaults_button.grid(row=0, column=4, padx=10, pady=5)
+
+# Set default material selection
+material_selection = list(material_defaults.keys())[0]
+
+Material_selection_button = ctk.CTkComboBox(buttons_frame, values=["Select Material"]+list(material_defaults.keys()),command=set_material_defaults)
+Material_selection_button.grid(row=0, column=5, padx=10, pady=5)
+###############
+
+def toggle_recording():
+    current_text = record_button.cget("text")
+    if current_text == "Start Recording":
+        record_button.configure(text="Stop Recording", 
+                              fg_color="red",
+                              hover_color="dark red")
+    else:
+        record_button.configure(text="Start Recording", 
+                              fg_color="green",
+                              hover_color="dark green")
+
+# Replace the record button section with:
+record_button = ctk.CTkButton(buttons_frame, 
+                             text="Start Recording",
+                             command=toggle_recording,
+                             font=("Arial", 16, "bold"),
+                             fg_color="green",
+                             hover_color="dark green",
+                             width=200,
+                             height=50)
+record_button.grid(row=0, column=6, padx=20, pady=10, sticky="ew")
+
+
+
+
+
 def update_gui_from_settings():
     """Update GUI elements based on latest settings"""
     # Clear existing previews
@@ -224,6 +227,11 @@ def update_gui_from_settings():
     draw_video_previews_from_json_selection(recording_settings)
     draw_image_previews_from_json_selection(recording_settings)
 
+def update_class_values():
+    if os.path.exists("class_values.json"):
+        with open("class_values.json", 'r') as f:
+            class_values = json.load(f)
+    
 # Add Image Viewing Field with fixed minimum size
 image_frame = ctk.CTkFrame(master=window)
 image_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
@@ -235,6 +243,25 @@ image_frame.configure(height=400)  # Set minimum height
 
 image_title = ctk.CTkLabel(image_frame, text="Images", font=("Arial", 12, "bold"))
 image_title.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+
+status_frame = ctk.CTkFrame(master=window)
+status_frame.grid(row=2,column=0,sticky="nsew", padx=10, pady=10)
+status_title = ctk.CTkLabel(status_frame, text="Status", font=("Arial", 12, "bold"))
+status_title.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+
+
+# New big status display
+big_status_display = ctk.CTkLabel(
+    status_frame, 
+    text="Idle",              # Example status text
+    font=("Arial", 20, "bold"),       # Large font for emphasis
+    text_color="yellow",               # Optional: use color to show status
+    anchor="w"
+)
+big_status_display.grid(row=1, column=0, sticky="ew", padx=10, pady=(5, 10))
+
+# Optional: make sure the frame expands with window resizing
+status_frame.grid_columnconfigure(0, weight=1)
 
 
 def draw_video_previews_from_json_selection(recording_settings):
@@ -309,6 +336,173 @@ def draw_image_previews_from_json_selection(recording_settings):
                 
 draw_video_previews_from_json_selection(recording_settings)
 draw_image_previews_from_json_selection(recording_settings)
+
+
+def plot_feature_on_axes(ax, feature_name, x_data, y_data, desired_value, tol_pos, tol_neg, title, xlabel, ylabel):
+    
+    FEATURE_COLORS = {
+    "Solidification Zone": "#1f77b4",
+    "Welding Wire": "#ff7f0e",
+    "Arc Flash": "#2ca02c"
+    }
+    
+    color = FEATURE_COLORS.get(feature_name, "black")
+
+    ax.plot(x_data, y_data, label=feature_name, color=color)
+    ax.axhline(desired_value, color=color, linestyle='--', linewidth=1)
+    ax.fill_between(x_data, desired_value - tol_neg, desired_value + tol_pos, color=color, alpha=0.2)
+
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.legend()
+
+def render_charts():
+    # Clear the frame first
+    for widget in chart_frame.winfo_children():
+        widget.destroy()
+   
+
+    # Draw frames for each graph type
+    
+    show_charts = graph_settings.get("show_charts", {})
+    chart_metrics = graph_settings.get("metrics",{})
+    
+    # Define tolerance and good values
+    material_selection 
+    data=class_values[material_selection]
+    
+    if show_charts.get("X Position Values"):
+        column_index=0
+        x_position_frame = ctk.CTkFrame(chart_frame)
+        x_position_frame_label = ctk.CTkLabel(x_position_frame, text= "X Position Values", font=("Arial", 12, "bold"))
+        x_position_frame.grid(row=0, column=column_index, padx=20, pady=20)
+        x_position_frame_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        if chart_metrics.get("X Average"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            x_average_frame = ctk.CTkFrame(x_position_frame)
+            x_average_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['x_average']['value']),
+                                 tol_pos=int(data['Solidification Zone']['x_average']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['x_average']['neg_tolerance']),
+                                 title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=x_average_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=+1
+        if chart_metrics.get("X Maximum"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            x_maximum_frame = ctk.CTkFrame(x_position_frame)
+            x_maximum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=x_maximum_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=+1
+            
+        if chart_metrics.get("X Minimum"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            x_minimum_frame = ctk.CTkFrame(x_position_frame)
+            x_minimum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
+                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=x_minimum_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=+1
+            
+            
+    if show_charts.get("Y Position Values"):
+        y_position_frame = ctk.CTkFrame(chart_frame)
+        y_position_frame_label = ctk.CTkLabel(y_position_frame, text= "Y Position Values", font=("Arial", 12, "bold"))
+        y_position_frame.grid(row=1, column=0, padx=20, pady=20)
+        y_position_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+    
+    if show_charts.get("Position Standard Deviations"):
+        position_std_frame = ctk.CTkFrame(chart_frame)
+        position_std_frame_label = ctk.CTkLabel(position_std_frame, text= "Position Standard Deviation", font=("Arial", 12, "bold"))
+        position_std_frame.grid(row=2, column=0, padx=20, pady=20)
+        position_std_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+        
+    if show_charts.get("Class Area"):
+        class_area_frame = ctk.CTkFrame(chart_frame)
+        class_area_frame_label = ctk.CTkLabel(class_area_frame, text= "Class Area", font=("Arial", 12, "bold"))
+        class_area_frame.grid(row=3, column=0, padx=20, pady=20)
+        class_area_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+        
+    if show_charts.get("Class Area Standard Deviation"):
+        class_area_std_frame = ctk.CTkFrame(chart_frame)
+        class_area_std_frame_label = ctk.CTkLabel(class_area_std_frame, text= "Class Area Standard Deviation", font=("Arial", 12, "bold"))
+        class_area_std_frame.grid(row=4, column=0, padx=20, pady=20)
+        class_area_std_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+        
+                
+    row = 0
+
+    def add_chart(title, x_data, y_data):
+        nonlocal row
+        fig, ax = plt.subplots(figsize=(5, 3))
+        ax.plot(x_data, y_data)
+        ax.set_title(title)
+        ax.grid(True)
+
+        canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+        canvas.draw()
+        canvas.get_tk_widget().grid(row=row, column=0, padx=10, pady=10)
+        row += 1
+
+    # Dummy data for now — replace with your real data
+    sample_x = list(range(10))
+    sample_y = [x**0.5 for x in sample_x]
+
+    # Check and draw each chart conditionally
+    
+
+    if show_charts.get("X Position Values"):
+        add_chart("X Position Values", sample_x, sample_y)
+
+    if show_charts.get("Y Position Values"):
+        add_chart("Y Position Values", sample_x, [x * 0.8 for x in sample_y])
+
+    if show_charts.get("Position Standard Deviations"):
+        add_chart("Position Std Devs", sample_x, [0.1 * (x % 3) for x in sample_x])
+
+    if show_charts.get("Class Area"):
+        add_chart("Class Area", sample_x, [x * 3 for x in sample_x])
+
+    if show_charts.get("Class Area Standard Deviation"):
+        add_chart("Class Area Std Dev", sample_x, [x * 0.5 for x in sample_x])
+
+# Graphical viewing
+if any (graph_settings.get("show_charts",{}).values()):
+    chart_window = ctk.CTkToplevel()
+    chart_window.title("Charts Display")
+    chart_window.geometry("800x600")
+    # Chart container
+    chart_frame = ctk.CTkFrame(chart_window)
+    chart_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    
+    render_charts()
+    
+    
 
 # # Add Graphical Viewing Field with fixed minimum size
 # graph_frame = ctk.CTkFrame(master=window)
