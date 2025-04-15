@@ -152,7 +152,7 @@ def open_material_defaults_settings():
     MaterialDefaultsGUI(window)
 
 def open_graph_settings():
-    GraphSettingsGUI(window)
+    GraphSettingsGUI(window, callback = update_graphs)
 
 def set_material_defaults(choice=None):
     if choice == "Select Material":
@@ -210,7 +210,12 @@ record_button.grid(row=0, column=6, padx=20, pady=10, sticky="ew")
 
 
 
-
+def update_graphs():
+    if os.path.exists("graph_settings.json"):
+        with open("graph_settings.json", 'r') as f:
+            global graph_settings 
+            graph_settings = json.load(f)
+            render_charts()
 
 def update_gui_from_settings():
     """Update GUI elements based on latest settings"""
@@ -230,7 +235,9 @@ def update_gui_from_settings():
 def update_class_values():
     if os.path.exists("class_values.json"):
         with open("class_values.json", 'r') as f:
+            global class_values 
             class_values = json.load(f)
+            render_charts()
     
 # Add Image Viewing Field with fixed minimum size
 image_frame = ctk.CTkFrame(master=window)
@@ -356,6 +363,7 @@ def plot_feature_on_axes(ax, feature_name, x_data, y_data, desired_value, tol_po
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.legend()
+    ax.autoscale_view() 
 
 def render_charts():
     # Clear the frame first
@@ -388,41 +396,65 @@ def render_charts():
                                  tol_pos=int(data['Solidification Zone']['x_average']['pos_tolerance']),
                                  tol_neg=int(data['Solidification Zone']['x_average']['neg_tolerance']),
                                  title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
-            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
-            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['x_average']['value']),
+                                 tol_pos=int(data['Welding Wire']['x_average']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['x_average']['neg_tolerance']),
+                                 title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['x_average']['value']),
+                                 tol_pos=int(data['Arc Flash']['x_average']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['x_average']['neg_tolerance']),
+                                 title="X Average",xlabel="Frame Index",ylabel="Pixel Value")
             canvas = FigureCanvasTkAgg(fig, master=x_average_frame)
             canvas.draw()
             canvas.get_tk_widget().grid(row=1,column=column_index)
-            column_index=+1
+            column_index=column_index+1
         if chart_metrics.get("X Maximum"):
             fig=Figure(figsize=(4,3),dpi=100)
             ax = fig.add_subplot(111)
             x_maximum_frame = ctk.CTkFrame(x_position_frame)
             x_maximum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
-            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
-            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
-            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['x_max']['value']),
+                                 tol_pos=int(data['Solidification Zone']['x_max']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['x_max']['neg_tolerance']),
+                                 title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['x_max']['value']),
+                                 tol_pos=int(data['Welding Wire']['x_max']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['x_max']['neg_tolerance']),
+                                 title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['x_max']['value']),
+                                 tol_pos=int(data['Arc Flash']['x_max']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['x_max']['neg_tolerance']),
+                                 title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
             canvas = FigureCanvasTkAgg(fig, master=x_maximum_frame)
             canvas.draw()
             canvas.get_tk_widget().grid(row=1,column=column_index)
-            column_index=+1
+            column_index=column_index+1
             
         if chart_metrics.get("X Minimum"):
             fig=Figure(figsize=(4,3),dpi=100)
             ax = fig.add_subplot(111)
             x_minimum_frame = ctk.CTkFrame(x_position_frame)
             x_minimum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
-            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
-            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
-            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,2,4],desired_value=0,
-                                 tol_pos=1,tol_neg=-2,title="X Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['x_min']['value']),
+                                 tol_pos=int(data['Solidification Zone']['x_min']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['x_min']['neg_tolerance']),
+                                 title="X Minimum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['x_min']['value']),
+                                 tol_pos=int(data['Welding Wire']['x_min']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['x_min']['neg_tolerance']),
+                                 title="X Minimum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['x_min']['value']),
+                                 tol_pos=int(data['Arc Flash']['x_min']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['x_min']['neg_tolerance']),
+                                 title="X Minimum",xlabel="Frame Index",ylabel="Pixel Value")
             canvas = FigureCanvasTkAgg(fig, master=x_minimum_frame)
             canvas.draw()
             canvas.get_tk_widget().grid(row=1,column=column_index)
@@ -430,28 +462,200 @@ def render_charts():
             
             
     if show_charts.get("Y Position Values"):
+        column_index=0
         y_position_frame = ctk.CTkFrame(chart_frame)
         y_position_frame_label = ctk.CTkLabel(y_position_frame, text= "Y Position Values", font=("Arial", 12, "bold"))
         y_position_frame.grid(row=1, column=0, padx=20, pady=20)
-        y_position_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+        y_position_frame_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        
+        if chart_metrics.get("Y Average"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            y_average_frame = ctk.CTkFrame(y_position_frame)
+            y_average_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['y_average']['value']),
+                                 tol_pos=int(data['Solidification Zone']['y_average']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['y_average']['neg_tolerance']),
+                                 title="Y Average",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['y_average']['value']),
+                                 tol_pos=int(data['Welding Wire']['y_average']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['y_average']['neg_tolerance']),
+                                 title="Y Average",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['y_average']['value']),
+                                 tol_pos=int(data['Arc Flash']['y_average']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['y_average']['neg_tolerance']),
+                                 title="Y Average",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=y_average_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=column_index+1
+        if chart_metrics.get("Y Maximum"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            y_maximum_frame = ctk.CTkFrame(y_position_frame)
+            y_maximum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['y_max']['value']),
+                                 tol_pos=int(data['Solidification Zone']['y_max']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['y_max']['neg_tolerance']),
+                                 title="Y Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['y_max']['value']),
+                                 tol_pos=int(data['Welding Wire']['y_max']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['y_max']['neg_tolerance']),
+                                 title="Y Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['y_max']['value']),
+                                 tol_pos=int(data['Arc Flash']['y_max']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['y_max']['neg_tolerance']),
+                                 title="Y Maximum",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=y_maximum_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=column_index+1
+            
+        if chart_metrics.get("Y Minimum"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            y_minimum_frame = ctk.CTkFrame(y_position_frame)
+            y_minimum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['y_min']['value']),
+                                 tol_pos=int(data['Solidification Zone']['y_min']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['y_min']['neg_tolerance']),
+                                 title="Y Minimum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['y_min']['value']),
+                                 tol_pos=int(data['Welding Wire']['y_min']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['y_min']['neg_tolerance']),
+                                 title="Y Minimum",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['y_min']['value']),
+                                 tol_pos=int(data['Arc Flash']['y_min']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['y_min']['neg_tolerance']),
+                                 title="Y Minimum",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=y_minimum_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=+1
     
     if show_charts.get("Position Standard Deviations"):
+        column_index = 0
         position_std_frame = ctk.CTkFrame(chart_frame)
         position_std_frame_label = ctk.CTkLabel(position_std_frame, text= "Position Standard Deviation", font=("Arial", 12, "bold"))
-        position_std_frame.grid(row=2, column=0, padx=20, pady=20)
+        position_std_frame.grid(row=0, column=1, padx=20, pady=20)
         position_std_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
         
-    if show_charts.get("Class Area"):
-        class_area_frame = ctk.CTkFrame(chart_frame)
-        class_area_frame_label = ctk.CTkLabel(class_area_frame, text= "Class Area", font=("Arial", 12, "bold"))
-        class_area_frame.grid(row=3, column=0, padx=20, pady=20)
-        class_area_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+        if chart_metrics.get("X Average Standard Deviation"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            x_avg_std_dev_frame = ctk.CTkFrame(position_std_frame)
+            x_avg_std_dev_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['x_avg_std_deviation']['value']),
+                                 tol_pos=int(data['Solidification Zone']['x_avg_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['x_avg_std_deviation']['neg_tolerance']),
+                                 title="X Avg Std Dev",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['x_avg_std_deviation']['value']),
+                                 tol_pos=int(data['Welding Wire']['x_avg_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['x_avg_std_deviation']['neg_tolerance']),
+                                 title="X Avg Std Dev",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['x_avg_std_deviation']['value']),
+                                 tol_pos=int(data['Arc Flash']['x_avg_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['x_avg_std_deviation']['neg_tolerance']),
+                                 title="X Avg Std Dev",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=x_avg_std_dev_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=column_index+1
+            
+        if chart_metrics.get("Y Average Standard Deviation"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            y_avg_std_dev_frame = ctk.CTkFrame(position_std_frame)
+            y_avg_std_dev_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['y_avg_std_deviation']['value']),
+                                 tol_pos=int(data['Solidification Zone']['y_avg_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['y_avg_std_deviation']['neg_tolerance']),
+                                 title="Y Avg Std Dev",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['y_avg_std_deviation']['value']),
+                                 tol_pos=int(data['Welding Wire']['y_avg_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['y_avg_std_deviation']['neg_tolerance']),
+                                 title="Y Avg Std Dev",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['y_avg_std_deviation']['value']),
+                                 tol_pos=int(data['Arc Flash']['y_avg_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['y_avg_std_deviation']['neg_tolerance']),
+                                 title="Y Avg Std Dev",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=y_avg_std_dev_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=column_index+1
+      
         
+    if show_charts.get("Class Area"):
+        column_index = 0
+        class_area_frame = ctk.CTkFrame(chart_frame)
+        class_area_frame_label = ctk.CTkLabel(class_area_frame, text= "Class Area and Standard Deviation", font=("Arial", 12, "bold"))
+        class_area_frame.grid(row=1, column=1, padx=20, pady=20)
+        class_area_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+        if chart_metrics.get("Class Area"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            class_area_sub_frame = ctk.CTkFrame(class_area_frame)
+            class_area_sub_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['area_average']['value']),
+                                 tol_pos=int(data['Solidification Zone']['area_average']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['area_average']['neg_tolerance']),
+                                 title="Class Area",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['area_average']['value']),
+                                 tol_pos=int(data['Welding Wire']['area_average']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['area_average']['neg_tolerance']),
+                                 title="Class Area",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['area_average']['value']),
+                                 tol_pos=int(data['Arc Flash']['area_average']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['area_average']['neg_tolerance']),
+                                 title="Class Area",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=class_area_sub_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=column_index+1
+            
     if show_charts.get("Class Area Standard Deviation"):
-        class_area_std_frame = ctk.CTkFrame(chart_frame)
-        class_area_std_frame_label = ctk.CTkLabel(class_area_std_frame, text= "Class Area Standard Deviation", font=("Arial", 12, "bold"))
-        class_area_std_frame.grid(row=4, column=0, padx=20, pady=20)
-        class_area_std_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+        if chart_metrics.get("Class Area"):
+            fig=Figure(figsize=(4,3),dpi=100)
+            ax = fig.add_subplot(111)
+            class_std_dev_sub_frame = ctk.CTkFrame(class_area_frame)
+            class_std_dev_sub_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
+            plot_feature_on_axes(ax,"Solidification Zone",x_data = [0,1,2], y_data = [0,1,2],
+                                 desired_value=int(data['Solidification Zone']['area_std_deviation']['value']),
+                                 tol_pos=int(data['Solidification Zone']['area_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Solidification Zone']['area_std_deviation']['neg_tolerance']),
+                                 title="Standard Deviation",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Welding Wire",x_data = [0,1,2], y_data = [0,2,4],
+                                 desired_value=int(data['Welding Wire']['area_std_deviation']['value']),
+                                 tol_pos=int(data['Welding Wire']['area_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Welding Wire']['area_std_deviation']['neg_tolerance']),
+                                 title="Standard Deviation",xlabel="Frame Index",ylabel="Pixel Value")
+            plot_feature_on_axes(ax,"Arc Flash",x_data = [0,1,2], y_data = [0,3,6],
+                                 desired_value=int(data['Arc Flash']['area_std_deviation']['value']),
+                                 tol_pos=int(data['Arc Flash']['area_std_deviation']['pos_tolerance']),
+                                 tol_neg=int(data['Arc Flash']['area_std_deviation']['neg_tolerance']),
+                                 title="Standard Deviation",xlabel="Frame Index",ylabel="Pixel Value")
+            canvas = FigureCanvasTkAgg(fig, master=class_std_dev_sub_frame)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=1,column=column_index)
+            column_index=column_index+1
         
                 
     row = 0
@@ -475,20 +679,7 @@ def render_charts():
     # Check and draw each chart conditionally
     
 
-    if show_charts.get("X Position Values"):
-        add_chart("X Position Values", sample_x, sample_y)
-
-    if show_charts.get("Y Position Values"):
-        add_chart("Y Position Values", sample_x, [x * 0.8 for x in sample_y])
-
-    if show_charts.get("Position Standard Deviations"):
-        add_chart("Position Std Devs", sample_x, [0.1 * (x % 3) for x in sample_x])
-
-    if show_charts.get("Class Area"):
-        add_chart("Class Area", sample_x, [x * 3 for x in sample_x])
-
-    if show_charts.get("Class Area Standard Deviation"):
-        add_chart("Class Area Std Dev", sample_x, [x * 0.5 for x in sample_x])
+    
 
 # Graphical viewing
 if any (graph_settings.get("show_charts",{}).values()):

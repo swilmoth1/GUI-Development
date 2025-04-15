@@ -1,7 +1,7 @@
 {
     "metrics": {
         "X Average": true,
-        "X Maximum": true,
+        "X Maximum": false,
         "X Minimum": true,
         "Y Average": true,
         "Y Maximum": true,

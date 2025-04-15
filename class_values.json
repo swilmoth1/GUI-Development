@@ -12,7 +12,7 @@
                 "neg_tolerance": "0"
             },
             "y_min": {
-                "value": "0",
+                "value": "100",
                 "pos_tolerance": "0",
                 "neg_tolerance": "0"
             },
@@ -22,7 +22,7 @@
                 "neg_tolerance": "0"
             },
             "y_average": {
-                "value": "0",
+                "value": "10",
                 "pos_tolerance": "0",
                 "neg_tolerance": "0"
             },
@@ -32,9 +32,9 @@
                 "neg_tolerance": "0"
             },
             "area_average": {
-                "value": "0",
-                "pos_tolerance": "0",
-                "neg_tolerance": "0"
+                "value": "50",
+                "pos_tolerance": "100",
+                "neg_tolerance": "60"
             },
             "area_std_deviation": {
                 "value": "0",
@@ -42,7 +42,7 @@
                 "neg_tolerance": "0"
             },
             "y_avg_std_deviation": {
-                "value": "0",
+                "value": "10",
                 "pos_tolerance": "0",
                 "neg_tolerance": "0"
             },
@@ -84,9 +84,9 @@
                 "neg_tolerance": "30"
             },
             "area_average": {
-                "value": "0",
-                "pos_tolerance": "0",
-                "neg_tolerance": "0"
+                "value": "10",
+                "pos_tolerance": "110",
+                "neg_tolerance": "30"
             },
             "area_std_deviation": {
                 "value": "0",
@@ -136,9 +136,9 @@
                 "neg_tolerance": "0"
             },
             "area_average": {
-                "value": "0",
-                "pos_tolerance": "0",
-                "neg_tolerance": "0"
+                "value": "20",
+                "pos_tolerance": "40",
+                "neg_tolerance": "54"
             },
             "area_std_deviation": {
                 "value": "0",
@@ -160,7 +160,7 @@
     "410SS": {
         "Welding Wire": {
             "x_min": {
-                "value": "20",
+                "value": "50",
                 "pos_tolerance": "0",
                 "neg_tolerance": "0"
             },

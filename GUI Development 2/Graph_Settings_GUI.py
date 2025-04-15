@@ -7,9 +7,10 @@ from tkinter import ttk
 import easygui
 
 class GraphSettingsGUI:
-    def __init__(self, root):
+    def __init__(self, root,callback=None):
         self.root = root
         self.window = ctk.CTkToplevel(root)
+        self.callback = callback
         self.window.title("Graph Settings")
         self.graph_settings_file = "graph_settings.json"
         self.save_folder=os.getcwd()
@@ -114,7 +115,8 @@ class GraphSettingsGUI:
         
         with open(self.graph_settings_file, 'w') as f:
             json.dump(settings, f, indent=4)
-        
+        if self.callback:
+            self.callback()
         print("Graph Settings Saved:", settings)
         self.on_closing()
 
