@@ -17,7 +17,10 @@ from collections import deque
 import time
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
+import socket
+import threading
+from pypylon import pylon
+import sys
 
 # Set theme and color
 ctk.set_appearance_mode("dark")
@@ -28,6 +31,14 @@ NUM_GRAPHS = 5  # Updated to 5 graphs
 HISTORY_LENGTH = 100  # Number of frames to show in history
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 DEFAULT_IMG = os.path.join(ASSETS_DIR, "placeholder.png")
+
+
+cam = 0
+cam_lock = threading.Lock()
+
+# Camera IP and port
+IP = "169.254.235.230"
+PORT = 139
 
 # Ensure assets directory exists
 if not os.path.exists(ASSETS_DIR):
@@ -253,8 +264,12 @@ image_title.grid(row=0, column=0, sticky="w", padx=10, pady=5)
 
 status_frame = ctk.CTkFrame(master=window)
 status_frame.grid(row=2,column=0,sticky="nsew", padx=10, pady=10)
-status_title = ctk.CTkLabel(status_frame, text="Status", font=("Arial", 12, "bold"))
+status_title = ctk.CTkLabel(status_frame, text="Recording Status:", font=("Arial", 12, "bold"))
 status_title.grid(row=0,column=0,sticky="w", padx=10, pady=5)
+
+
+camera_status_frame_title = ctk.CTkLabel(status_frame, text="Camera Status:", font=("Arial",12,"bold"))
+camera_status_frame_title.grid(row=0,column=1,sticky="nsew",padx=10,pady=5)
 
 
 # New big status display
@@ -267,6 +282,13 @@ big_status_display = ctk.CTkLabel(
 )
 big_status_display.grid(row=1, column=0, sticky="ew", padx=10, pady=(5, 10))
 
+
+big_camera_display = ctk.CTkLabel(status_frame,
+                                  text="Disconnected",
+                                  font=("Arial", 20, "bold"),
+                                  text_color="yellow",
+                                  anchor="e")
+big_camera_display.grid(row=1,column=1, sticky="ew", padx=10, pady= (5,10))
 # Optional: make sure the frame expands with window resizing
 status_frame.grid_columnconfigure(0, weight=1)
 
@@ -657,29 +679,10 @@ def render_charts():
             canvas.get_tk_widget().grid(row=1,column=column_index)
             column_index=column_index+1
         
-                
-    row = 0
 
-    def add_chart(title, x_data, y_data):
-        nonlocal row
-        fig, ax = plt.subplots(figsize=(5, 3))
-        ax.plot(x_data, y_data)
-        ax.set_title(title)
-        ax.grid(True)
-
-        canvas = FigureCanvasTkAgg(fig, master=chart_frame)
-        canvas.draw()
-        canvas.get_tk_widget().grid(row=row, column=0, padx=10, pady=10)
-        row += 1
-
-    # Dummy data for now — replace with your real data
-    sample_x = list(range(10))
-    sample_y = [x**0.5 for x in sample_x]
-
-    # Check and draw each chart conditionally
+   
     
 
-    
 
 # Graphical viewing
 if any (graph_settings.get("show_charts",{}).values()):
@@ -693,129 +696,57 @@ if any (graph_settings.get("show_charts",{}).values()):
     
     render_charts()
     
+
+
+def detect_basler_camera():
+    try:
+        tl_factory = pylon.TlFactory.GetInstance()
+        devices = tl_factory.EnumerateDevices()
+        return devices[0] if devices else None
+    except Exception as e:
+        print(f"Error detecting camera: {e}")
+        return None
+
+def update_status_loop(label):
+    global cam, camera
+    connected_once = False
+
+    while not connected_once:
+        # Show "Attempting to connect"
+        label.after(0, lambda: label.configure(text="Attempting to connect", text_color="yellow"))
+
+        device = detect_basler_camera()
+
+        if device:
+            try:
+                cam_obj = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateDevice(device))
+                cam_obj.Open()
+                camera = cam_obj  # Store for later use
+                connected_once = True
+
+                # Update label to Connected
+                label.after(0, lambda: label.configure(text="Connected", text_color="green"))
+
+                with cam_lock:
+                    cam = 1
+
+                print(f"✅ Camera connected: {camera.GetDeviceInfo().GetModelName()}")
+            except Exception as e:
+                print(f"❌ Failed to open camera: {e}")
+                label.after(0, lambda: label.configure(text="Disconnected", text_color="red"))
+                with cam_lock:
+                    cam = 0
+        else:
+            label.after(0, lambda: label.configure(text="Disconnected", text_color="red"))
+            with cam_lock:
+                cam = 0
+
+        if not connected_once:
+            time.sleep(2)
     
 
-# # Add Graphical Viewing Field with fixed minimum size
-# graph_frame = ctk.CTkFrame(master=window)
-# graph_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
-# graph_frame.grid_columnconfigure(0, weight=1)
-# graph_frame.grid_rowconfigure(0, weight=0)  # Title row doesn't expand
-# graph_frame.grid_rowconfigure(1, weight=1)  # Content row expands
-# graph_frame.grid_propagate(False)  # Prevent frame from shrinking
-# graph_frame.configure(height=400)  # Set minimum height
-
-# graph_title = ctk.CTkLabel(graph_frame, text="Graphs", font=("Arial", 12, "bold"))
-# graph_title.grid(row=0, column=0, sticky="w", padx=10, pady=5)
-
-# # Load settings from graphical json
-# show_charts = graph_settings.get("show_charts", {})
-# chart_groups = graph_settings.get("chart_groups", {})
-# metrics = graph_settings.get("metrics",{})
-
-# chart_container = ctk.CTkFrame(graph_frame)
-# chart_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
-# chart_container.grid_columnconfigure((0, 1, 2), weight=1)
-# chart_container.grid_rowconfigure((0, 1), weight=1)
-
-# # Dummy data — replace with real values
-# dummy_data = {
-#     "X Average": [1, 2, 3],
-#     "X Maximum": [2, 3, 4],
-#     "X Minimum": [0, 1, 2],
-#     "Y Average": [4, 5, 6],
-#     "Y Maximum": [6, 7, 8],
-#     "Y Minimum": [2, 3, 4],
-#     "X Average Standard Deviation": [0.1, 0.2, 0.15],
-#     "Y Average Standard Deviation": [0.2, 0.3, 0.25],
-#     "Class Area": [10, 15, 20],
-#     "Class Area Standard Deviation": [1, 1.5, 2]
-# }
-
-
-# # Set thresholds with separate positive and negative tolerances
-# thresholds = {
-#     "X Average": 2,  # Example threshold for X Average
-#     "Y Average": 5,  # Example threshold for Y Average
-# }
-
-# # Set positive and negative tolerances for each metric
-# positive_tolerances = {
-#     "X Average": 0.5,  # Positive tolerance for X Average
-#     "Y Average": 0.3,  # Positive tolerance for Y Average
-# }
-
-# negative_tolerances = {
-#     "X Average": 0.2,  # Negative tolerance for X Average
-#     "Y Average": 0.4,  # Negative tolerance for Y Average
-# }
-
-
-# # Set the initial row and column positions for the grid layout
-# row = 1
-# col = 0
-
-# # Create subplots based on visible charts
-# visible_charts = [(name, chart_groups[name]) for name, show in show_charts.items() if show and name in chart_groups]
-# n = len(visible_charts)
-
-# if n == 0:
-#     # If no charts are selected, show a message
-#     no_graph_label = ctk.CTkLabel(graph_frame, text="No charts selected.")
-#     no_graph_label.grid(row=1, column=0)
-# else:
-#     # 3 columns, 2 rows grid layout
-#     cols = 3
-#     rows = 2
-
-#     fig, axs = plt.subplots(rows, cols, figsize=(cols * 5, rows * 3.5))
-#     axs = axs.flatten()  # Flatten in case we have a 2D array of axes
-
-#     # Loop through and create the graphs
-#     for i, (title, metric_keys) in enumerate(visible_charts):
-#         ax = axs[i]
-        
-#         for metric in metric_keys:
-#             if metrics.get(metric, False):
-#                 ax.plot(dummy_data.get(metric, []), label=metric)
-                
-#                 # If a threshold is defined for the metric, add shaded areas for positive and negative tolerance
-#                 if metric in thresholds:
-#                     threshold = thresholds[metric]
-#                     pos_tol = positive_tolerances.get(metric, 0)
-#                     neg_tol = negative_tolerances.get(metric, 0)
-
-#                     # Plot shaded area for positive tolerance (green)
-#                     ax.fill_between(range(len(dummy_data.get(metric, []))),
-#                                     threshold, threshold + pos_tol,
-#                                     color='green', alpha=0.3, label=f"{metric} + tolerance")
-                    
-#                     # Plot shaded area for negative tolerance (red)
-#                     ax.fill_between(range(len(dummy_data.get(metric, []))),
-#                                     threshold, threshold - neg_tol,
-#                                     color='red', alpha=0.3, label=f"{metric} - tolerance")
-
-#         ax.set_title(title)
-#         ax.legend(fontsize="small")
-#         ax.grid(True)
-
-#     # Hide unused subplots if there are fewer than 6 charts
-#     for ax in axs[n:]:
-#         ax.axis("off")
-
-#     fig.tight_layout()
-
-#     # Embed the figure in the existing graph_frame
-#     canvas = FigureCanvasTkAgg(fig, master=graph_frame)
-#     canvas_widget = canvas.get_tk_widget()
-#     canvas_widget.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
-            
-            
-
-
-
-
-
-
+thread = threading.Thread(target=update_status_loop, args=(big_camera_display,), daemon=True)
+thread.start()
 
 
 #run
