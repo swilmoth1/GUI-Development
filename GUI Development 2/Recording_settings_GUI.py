@@ -48,6 +48,7 @@ class RecordingsettingsGUI:
         # Exposure time settings
         self.et_mode = ctk.StringVar(value="Fixed")
         self.et_fixed = ctk.StringVar(value="1000")
+        self.et_time = ctk.StringVar(value="5")
         self.et_start = ctk.StringVar(value="1000")
         self.et_end = ctk.StringVar(value="10000")
         self.et_step = ctk.StringVar(value="1000")
@@ -78,6 +79,7 @@ class RecordingsettingsGUI:
                     # Load exposure settings
                     self.et_mode.set(settings.get('et_mode', 'Fixed'))
                     self.et_fixed.set(settings.get('et_fixed', '1000'))
+                    self.et_time.set(settings.get('et_time','5'))
                     self.et_start.set(settings.get('et_start', '1000'))
                     self.et_end.set(settings.get('et_end', '10000'))
                     self.et_step.set(settings.get('et_step', '1000'))
@@ -106,6 +108,7 @@ class RecordingsettingsGUI:
             # Exposure settings
             'et_mode': self.et_mode.get(),
             'et_fixed': self.et_fixed.get(),
+            'et_time':self.et_time.get(),
             'et_start': self.et_start.get(),
             'et_end': self.et_end.get(),
             'et_step': self.et_step.get(),
@@ -198,7 +201,8 @@ class RecordingsettingsGUI:
         self.iter_frame = ctk.CTkFrame(Exposure_time_settings_frame)
         for label, var in [("Start (μs):", self.et_start),
                          ("End (μs):", self.et_end),
-                         ("Step (μs):", self.et_step)]:
+                         ("Step (μs):", self.et_step),
+                         ("Iteration Time (s):", self.et_time)]:
             frame = ctk.CTkFrame(self.iter_frame)
             frame.pack(fill="x", pady=2)
             ctk.CTkLabel(frame, text=label).pack(side="left", padx=5)

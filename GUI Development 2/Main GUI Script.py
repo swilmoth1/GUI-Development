@@ -21,6 +21,7 @@ import socket
 import threading
 from pypylon import pylon
 import sys
+import cv2
 
 # Set theme and color
 ctk.set_appearance_mode("dark")
@@ -32,7 +33,7 @@ HISTORY_LENGTH = 100  # Number of frames to show in history
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 DEFAULT_IMG = os.path.join(ASSETS_DIR, "placeholder.png")
 
-
+frame_count= 0
 cam = 0
 cam_lock = threading.Lock()
 
@@ -292,6 +293,76 @@ big_camera_display.grid(row=1,column=1, sticky="ew", padx=10, pady= (5,10))
 # Optional: make sure the frame expands with window resizing
 status_frame.grid_columnconfigure(0, weight=1)
 
+def set_ET_time(recording_settings,time):
+    if recording_settings.get("et_mode") == "Fixed":
+        return recording_settings.get("et_fixed"), 0  # Fixed mode, loop count always 0
+
+    elif recording_settings.get("et_mode") == "Iterate":
+        et_start = recording_settings.get("et_start")
+        et_end = recording_settings.get("et_end")
+        et_step = recording_settings.get("et_step")
+        time_increment = recording_settings.get("et_time")
+
+        # Total number of unique steps before looping
+        total_steps = ((et_end - et_start) // et_step) + 1
+
+        # How many time steps have passed
+        steps_passed = int(time // time_increment)
+
+        # Determine loop count and current step
+        loop_count = steps_passed // total_steps
+        current_step = steps_passed % total_steps
+
+        # Calculate current exposure
+        exposure_time = et_start + current_step * et_step
+
+        return exposure_time, loop_count
+
+def annotate_raw_image(frame, annotation_settings, exposure_time, loop_count, elapsed_time, fps):
+    annotated_frame = frame
+    if annotation_settings["manual_settings"]["label_positions"].get("top-left"):
+        # Top left corner: Exposure Time, Time Elapsed, Filters Applied
+        frame_height, frame_width, RGB_val = annotated_frame.shape
+        
+        cv2.putText(annotated_frame, f"ET: {exposure_time}", (10, 30), 
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        if annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("show"):
+            cv2.putText(annotated_frame, f"Time: {annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("value"):.2f}s", (10, 50), 
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        if annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("show"):
+        cv2.putText(annotated_frame, f"FA: {annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("value")}", (10, 70), 
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        return annotated_frame
+    
+def calculate_fps(frame_count, start_time):
+    # Calculate the fps of the video based on the current time, start time, and frames currently collected.
+    elapsed_time = time.time() - start_time
+    fps = frame_count / elapsed_time if elapsed_time > 0 else 0
+    return fps, elapsed_time
+
+def video_acquiring(recording_settings, annotation_settings):
+    # Establish Time
+    start_time = time.time()
+    elapsed_time = time.time()-start_time
+    frame_count = frame_count + 1
+    # Setup exposure time
+    [exposure_time, loop_count]=set_ET_time(recording_settings, elapsed_time)
+    camera.ExposureTimeRaw.SetValue(exposure_time)
+    
+    grab_result = camera.RetrieveResult(1000, pylon.TimeoutHandling_ThrowException)
+    img_array=grab_result.Array
+    raw_rgb = cv2.cvtColor(img_array, cv2.COLOR_BAYER_BG2RGB)
+    if recording_settings.get("video_raw"):
+        raw_image = raw_rgb.copy()
+        return raw_image
+    if recording_settings.get("video_annotated"):
+        [fps]=calculate_fps(frame_count, start_time)
+        
+    if recording_settings.get("video_segmeneted"):
+        
+
 
 def draw_video_previews_from_json_selection(recording_settings):
     # Add image viewing field to display image if the setting is selected in the submenu.
@@ -312,11 +383,12 @@ def draw_video_previews_from_json_selection(recording_settings):
                 preview_frame = ctk.CTkFrame(master=image_frame)
                 preview_frame.grid(row=preview_row, column=preview_col, padx=10, pady=10)
 
+                
                 # Image label (no text)
-                photo_img = ctk.CTkImage(light_image=img, size=(550,400))  # auto-resizes
+                # photo_img = ctk.CTkImage(light_image=img, size=(550,400))  # auto-resizes
 
-                img_label = ctk.CTkLabel(master=preview_frame, image=photo_img, text="")
-                img_label.pack()
+                # img_label = ctk.CTkLabel(master=preview_frame, image=photo_img, text="")
+                # img_label.pack()
 
                 # Text label underneath
                 text = key.replace("_", " ").title()

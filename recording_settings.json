@@ -7,6 +7,7 @@
     "image_segmented": false,
     "et_mode": "Fixed",
     "et_fixed": "1000",
+    "et_time": "5",
     "et_start": "1000",
     "et_end": "10000",
     "et_step": "1000",
