@@ -33,7 +33,8 @@ HISTORY_LENGTH = 100  # Number of frames to show in history
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 DEFAULT_IMG = os.path.join(ASSETS_DIR, "placeholder.png")
 
-frame_count= 0
+global frame_count
+frame_count = 0
 cam = 0
 cam_lock = threading.Lock()
 
@@ -198,17 +199,33 @@ Material_selection_button = ctk.CTkComboBox(buttons_frame, values=["Select Mater
 Material_selection_button.grid(row=0, column=5, padx=10, pady=5)
 ###############
 
+is_recording = False
+
 def toggle_recording():
-    current_text = record_button.cget("text")
-    if current_text == "Start Recording":
+    global is_recording
+    if record_button.cget("text") == "Start Recording":
         record_button.configure(text="Stop Recording", 
-                              fg_color="red",
-                              hover_color="dark red")
+                                fg_color="red",
+                                hover_color="dark red")
+        is_recording = True
+        update_recording_loop()  # Start the loop
     else:
         record_button.configure(text="Start Recording", 
-                              fg_color="green",
-                              hover_color="dark green")
+                                fg_color="green",
+                                hover_color="dark green")
+        is_recording = False     # Stop the loop
 
+def update_recording_loop():
+    if is_recording:
+        raw_image, annotated_image = video_acquiring(recording_settings, annotation_settings)
+        frame_dict = {
+            "video_raw": raw_image,
+            "video_annotated": annotated_image
+        }
+        draw_video_previews_from_frames(recording_settings, frame_dict)
+        # Schedule this function to run again after 30 ms (approx ~30 fps)
+        window.after(30, update_recording_loop)
+    
 # Replace the record button section with:
 record_button = ctk.CTkButton(buttons_frame, 
                              text="Start Recording",
@@ -320,22 +337,127 @@ def set_ET_time(recording_settings,time):
 
 def annotate_raw_image(frame, annotation_settings, exposure_time, loop_count, elapsed_time, fps):
     annotated_frame = frame
+    frame_height, frame_width, _ = annotated_frame.shape
+
+    ### ─── TOP LEFT ───────────────────────────────────────────────
     if annotation_settings["manual_settings"]["label_positions"].get("top-left"):
-        # Top left corner: Exposure Time, Time Elapsed, Filters Applied
-        frame_height, frame_width, RGB_val = annotated_frame.shape
-        
-        cv2.putText(annotated_frame, f"ET: {exposure_time}", (10, 30), 
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
+        line_offset = 0
+        top_left_start_y = 30
+        spacing = 20
+
+        # Exposure Time
+        cv2.putText(annotated_frame, f"ET: {exposure_time}", (10, top_left_start_y + spacing * line_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        line_offset += 1
+
+        # Time
         if annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("show"):
-            cv2.putText(annotated_frame, f"Time: {annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("value"):.2f}s", (10, 50), 
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
+            text = annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("value")
+            cv2.putText(annotated_frame, f"Time: {text}", (10, top_left_start_y + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+
+        # FA
         if annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("show"):
-        cv2.putText(annotated_frame, f"FA: {annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("value")}", (10, 70), 
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        return annotated_frame
-    
+            text = annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("value")
+            cv2.putText(annotated_frame, f"FA: {text}", (10, top_left_start_y + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    ### ─── TOP RIGHT ──────────────────────────────────────────────
+    if annotation_settings["manual_settings"]["label_positions"].get("top-right"):
+        line_offset = 0
+        top_right_start_y = 30
+        spacing = 20
+
+        fields = annotation_settings["manual_settings"]["top_right_fields"]
+        for field in ["FPS", "Running", "Output", "Illum", "Shielding Gas", "Note"]:
+            if fields[field].get("show"):
+                text = f"{field}: {fields[field].get('value')}"
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+                cv2.putText(annotated_frame, text,
+                            (frame_width - text_size[0] - 10, top_right_start_y + spacing * line_offset),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                line_offset += 1
+
+    ### ─── BOTTOM LEFT ────────────────────────────────────────────
+    if annotation_settings["manual_settings"]["label_positions"].get("bottom-left"):
+        line_offset = 0
+        bottom_left_start_y = frame_height - 100
+        spacing = 20
+
+        fields = annotation_settings["manual_settings"]["bottom_left_fields"]
+        for field in ["Material", "Job Number", "Wire Feed Speed", "Travel Speed"]:
+            if fields[field].get("show"):
+                text = f"{field}: {fields[field].get('value')}"
+                cv2.putText(annotated_frame, text,
+                            (10, bottom_left_start_y + spacing * line_offset),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                line_offset += 1
+
+    ### ─── BOTTOM RIGHT ───────────────────────────────────────────
+    if annotation_settings["manual_settings"]["label_positions"].get("bottom-right"):
+        line_offset = 0
+        bottom_right_start = frame_height - 120
+        spacing = 20
+
+        # Camera
+        if annotation_settings["manual_settings"]["bottom_right_fields"]["Camera"].get("show"):
+            text = annotation_settings["manual_settings"]["bottom_right_fields"]["Camera"].get("value")
+            cv2.putText(annotated_frame, text,
+                        (frame_width - 200, bottom_right_start + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+
+        # Lens + Viewing Angle
+        fields = annotation_settings["manual_settings"]["bottom_right_fields"]
+        show_lens = fields["Lens"].get("show")
+        show_angle = fields["Viewing Angle"].get("show")
+        lens_val = fields["Lens"].get("value")
+        angle_val = fields["Viewing Angle"].get("value")
+
+        if show_lens or show_angle:
+            combined = []
+            if show_lens:
+                combined.append(lens_val)
+            if show_angle:
+                combined.append(angle_val)
+            text = " | ".join(combined)
+            cv2.putText(annotated_frame, text,
+                        (frame_width - 200, bottom_right_start + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+
+        # Focus
+        if fields["Focus"].get("show"):
+            cv2.putText(annotated_frame, fields["Focus"].get("value"),
+                        (frame_width - 200, bottom_right_start + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+
+        # Aperture (note: JSON typo was "Aperature" but use "Aperture" for consistency)
+        if fields["Aperature"].get("show"):
+            cv2.putText(annotated_frame, fields["Aperature"].get("value"),
+                        (frame_width - 200, bottom_right_start + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+
+        # Distance
+        if fields["Distance"].get("show"):
+            text = f"Distance: {fields['Distance'].get('value')}"
+            cv2.putText(annotated_frame, text,
+                        (frame_width - 200, bottom_right_start + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+
+        # CTWD
+        if fields["CTWD (mm)"].get("show"):
+            text = f"dNtW (mm): {fields['CTWD (mm)'].get('value')}"
+            cv2.putText(annotated_frame, text,
+                        (frame_width - 200, bottom_right_start + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    return annotated_frame
+
 def calculate_fps(frame_count, start_time):
     # Calculate the fps of the video based on the current time, start time, and frames currently collected.
     elapsed_time = time.time() - start_time
@@ -343,26 +465,89 @@ def calculate_fps(frame_count, start_time):
     return fps, elapsed_time
 
 def video_acquiring(recording_settings, annotation_settings):
-    # Establish Time
+    global frame_count
     start_time = time.time()
-    elapsed_time = time.time()-start_time
+    elapsed_time = time.time() - start_time
     frame_count = frame_count + 1
-    # Setup exposure time
-    [exposure_time, loop_count]=set_ET_time(recording_settings, elapsed_time)
-    camera.ExposureTimeRaw.SetValue(exposure_time)
-    
-    grab_result = camera.RetrieveResult(1000, pylon.TimeoutHandling_ThrowException)
-    img_array=grab_result.Array
-    raw_rgb = cv2.cvtColor(img_array, cv2.COLOR_BAYER_BG2RGB)
-    if recording_settings.get("video_raw"):
-        raw_image = raw_rgb.copy()
-        return raw_image
-    if recording_settings.get("video_annotated"):
-        [fps]=calculate_fps(frame_count, start_time)
-        
-    if recording_settings.get("video_segmeneted"):
-        
 
+    # Setup exposure time
+    [exposure_time, loop_count] = set_ET_time(recording_settings, elapsed_time)
+    camera.ExposureTimeRaw.SetValue(int(exposure_time))
+
+    # Grab frame
+    grab_result = camera.GrabOne(1000)
+
+    raw_image = None
+    annotated_image = None
+
+    if grab_result and grab_result.IsValid() and grab_result.GrabSucceeded():
+        img_array = grab_result.Array
+        raw_rgb = cv2.cvtColor(img_array, cv2.COLOR_BAYER_BG2RGB)
+
+        if recording_settings.get("video_raw"):
+            raw_image = raw_rgb.copy()
+
+        if recording_settings.get("video_annotated"):
+            [fps, elapsed_time] = calculate_fps(frame_count, start_time)
+            annotated_image = annotate_raw_image(
+                raw_rgb.copy(),
+                annotation_settings,
+                exposure_time,
+                loop_count,
+                elapsed_time,
+                fps,
+            )
+    else:
+        print("❌ Grab failed or returned invalid result.")
+
+    return raw_image, annotated_image
+
+def establish_image_frames(recording_settings):
+    preview_row = 1
+    preview_col = 0
+    i=1
+    
+    for key in ["video_raw", "video_annotated", "video_segmented"]:
+        if recording_settings.get(key):
+            image_frame.grid_columnconfigure(1, weight=1)
+
+
+def draw_video_previews_from_frames(recording_settings, frame_dict):
+    preview_row = 1
+    preview_col = 0
+    i = 1
+
+    for key in ["video_raw", "video_annotated", "video_segmented"]:
+        if recording_settings.get(key) and key in frame_dict:
+            try:
+                frame = frame_dict[key]
+                
+                # Convert BGR (OpenCV) to RGB (PIL)
+                if frame is not None:
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    img_pil = Image.fromarray(frame_rgb)
+                    img_pil = img_pil.resize((650, 450), Image.Resampling.LANCZOS)
+                    photo_img = ImageTk.PhotoImage(img_pil)
+
+                    image_frame.grid_columnconfigure(i, weight=1)
+
+                    preview_frame = ctk.CTkFrame(master=image_frame)
+                    preview_frame.grid(row=preview_row, column=preview_col, padx=10, pady=10)
+
+                    # Display image
+                    img_label = ctk.CTkLabel(master=preview_frame, image=photo_img, text="")
+                    img_label.image = photo_img  # Prevent garbage collection
+                    img_label.pack()
+
+                    # Display label text
+                    text = key.replace("_", " ").title()
+                    text_label = ctk.CTkLabel(master=preview_frame, text=text)
+                    text_label.pack(pady=(5, 0))
+
+                    preview_col += 1
+                    i += 1
+            except Exception as e:
+                print(f"Error displaying preview for {key}:", e)
 
 def draw_video_previews_from_json_selection(recording_settings):
     # Add image viewing field to display image if the setting is selected in the submenu.

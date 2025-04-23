@@ -1,20 +1,20 @@
 {
     "material_defaults": {
-        "enabled": true,
-        "selected": "316SS"
+        "enabled": false,
+        "selected": "Select Material"
     },
     "manual_settings": {
         "show_boxes": true,
         "show_labels": true,
         "label_positions": {
             "top-left": true,
-            "top-right": false,
-            "bottom-left": false,
-            "bottom-right": false
+            "top-right": true,
+            "bottom-left": true,
+            "bottom-right": true
         },
         "top_left_fields": {
             "Time": {
-                "show": false,
+                "show": true,
                 "value": ""
             },
             "FA": {
@@ -24,15 +24,15 @@
         },
         "top_right_fields": {
             "FPS": {
-                "show": false,
+                "show": true,
                 "value": ""
             },
             "Running": {
-                "show": false,
+                "show": true,
                 "value": ""
             },
             "Output": {
-                "show": false,
+                "show": true,
                 "value": ""
             },
             "Illum": {
@@ -44,7 +44,7 @@
                 "value": "98% Ar 2% O2"
             },
             "Note": {
-                "show": false,
+                "show": true,
                 "value": ""
             }
         },
