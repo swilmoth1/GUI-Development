@@ -38,6 +38,9 @@ frame_count = 0
 cam = 0
 cam_lock = threading.Lock()
 
+global start_time_integer
+start_time_integer = 0
+
 # Camera IP and port
 IP = "169.254.235.230"
 PORT = 139
@@ -54,6 +57,10 @@ image_paths = {
     "image_annotated": os.path.join(ASSETS_DIR, "Sample Annotated Image.png"),
     "image_segmented": os.path.join(ASSETS_DIR, "Sample Segmented Image.png")
 }
+
+preview_frames = {}
+preview_labels = {}
+preview_texts = {}
 
 def load_image_preview(path, size=(160,120)):
     try:
@@ -217,16 +224,19 @@ def toggle_recording():
 
 def update_recording_loop():
     if is_recording:
-        raw_image, annotated_image = video_acquiring(recording_settings, annotation_settings)
-        frame_dict = {
-            "video_raw": raw_image,
-            "video_annotated": annotated_image
-        }
-        draw_video_previews_from_frames(recording_settings, frame_dict)
-        # Schedule this function to run again after 30 ms (approx ~30 fps)
-        window.after(30, update_recording_loop)
-    
-# Replace the record button section with:
+        try:
+            raw_image, annotated_image = video_acquiring(recording_settings, annotation_settings)
+            frame_dict = {
+                "video_raw": raw_image,
+                "video_annotated": annotated_image
+            }
+            draw_video_previews_from_frames(recording_settings, frame_dict)
+        except Exception as e:
+            print(f"Error in recording loop: {e}")
+        finally:
+            # Schedule next update
+            window.after(30, update_recording_loop)
+
 record_button = ctk.CTkButton(buttons_frame, 
                              text="Start Recording",
                              command=toggle_recording,
@@ -248,10 +258,6 @@ def update_graphs():
 
 def update_gui_from_settings():
     """Update GUI elements based on latest settings"""
-    # Clear existing previews
-    for widget in image_frame.winfo_children():
-        widget.destroy()
-    
     # Reload settings
     if os.path.exists("recording_settings.json"):
         with open("recording_settings.json", 'r') as f:
@@ -352,7 +358,7 @@ def annotate_raw_image(frame, annotation_settings, exposure_time, loop_count, el
 
         # Time
         if annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("show"):
-            text = annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("value")
+            text = round(elapsed_time,2)
             cv2.putText(annotated_frame, f"Time: {text}", (10, top_left_start_y + spacing * line_offset),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             line_offset += 1
@@ -370,12 +376,33 @@ def annotate_raw_image(frame, annotation_settings, exposure_time, loop_count, el
         spacing = 20
 
         fields = annotation_settings["manual_settings"]["top_right_fields"]
-        for field in ["FPS", "Running", "Output", "Illum", "Shielding Gas", "Note"]:
+        if fields["FPS"].get("show"):
+            text = str(round(fps,2))
+            cv2.putText(annotated_frame, "FPS: " + text,
+                        (frame_width - 235, top_right_start_y + spacing * line_offset ),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+            
+        if fields["Running"].get("show"):
+            text = "Basler UI"
+            cv2.putText(annotated_frame, "Running: " + text,
+                        (frame_width - 235, top_right_start_y + spacing * line_offset ),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+            
+        if fields["Output"].get("show"):
+            text = "Sample"
+            cv2.putText(annotated_frame, "Output: " + text,
+                        (frame_width - 235, top_right_start_y + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+            
+        for field in ["Illum", "Shielding Gas", "Note"]:
             if fields[field].get("show"):
                 text = f"{field}: {fields[field].get('value')}"
                 text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
                 cv2.putText(annotated_frame, text,
-                            (frame_width - text_size[0] - 10, top_right_start_y + spacing * line_offset),
+                            (frame_width - 235, top_right_start_y + spacing * line_offset),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 line_offset += 1
 
@@ -428,15 +455,22 @@ def annotate_raw_image(frame, annotation_settings, exposure_time, loop_count, el
             line_offset += 1
 
         # Focus
-        if fields["Focus"].get("show"):
-            cv2.putText(annotated_frame, fields["Focus"].get("value"),
+        if fields["Focus"].get("show") & fields["Aperature"].get("show"):
+            cv2.putText(annotated_frame, "F:" + fields["Focus"].get("value") + " | A:" + fields["Aperature"].get("value"),
+                        (frame_width - 200, bottom_right_start + spacing * line_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            line_offset += 1
+        elif fields["Focus"].get("show"):
+            cv2.putText(annotated_frame, "F:" + fields["Focus"].get("value"),
                         (frame_width - 200, bottom_right_start + spacing * line_offset),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             line_offset += 1
 
         # Aperture (note: JSON typo was "Aperature" but use "Aperture" for consistency)
-        if fields["Aperature"].get("show"):
-            cv2.putText(annotated_frame, fields["Aperature"].get("value"),
+        
+            
+        elif fields["Aperature"].get("show"):
+            cv2.putText(annotated_frame, "A:" + fields["Aperature"].get("value"),
                         (frame_width - 200, bottom_right_start + spacing * line_offset),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             line_offset += 1
@@ -466,7 +500,13 @@ def calculate_fps(frame_count, start_time):
 
 def video_acquiring(recording_settings, annotation_settings):
     global frame_count
-    start_time = time.time()
+    global start_time_integer
+    if start_time_integer == 0:
+        global start_time
+        start_time = time.time()
+        
+        start_time_integer = 1
+    
     elapsed_time = time.time() - start_time
     frame_count = frame_count + 1
 
@@ -502,52 +542,56 @@ def video_acquiring(recording_settings, annotation_settings):
 
     return raw_image, annotated_image
 
-def establish_image_frames(recording_settings):
-    preview_row = 1
-    preview_col = 0
-    i=1
-    
-    for key in ["video_raw", "video_annotated", "video_segmented"]:
-        if recording_settings.get(key):
-            image_frame.grid_columnconfigure(1, weight=1)
-
-
-def draw_video_previews_from_frames(recording_settings, frame_dict):
+def establish_preview_frames(recording_settings):
+    """Create persistent preview frames once"""
     preview_row = 1
     preview_col = 0
     i = 1
-
+    
     for key in ["video_raw", "video_annotated", "video_segmented"]:
-        if recording_settings.get(key) and key in frame_dict:
+        if recording_settings.get(key):
+            if key not in preview_frames:
+                image_frame.grid_columnconfigure(i, weight=1)
+                
+                # Create frame
+                preview_frames[key] = ctk.CTkFrame(master=image_frame)
+                preview_frames[key].grid(row=preview_row, column=preview_col, padx=10, pady=10)
+                
+                # Create label for image
+                preview_labels[key] = ctk.CTkLabel(master=preview_frames[key], text="")
+                preview_labels[key].pack()
+                
+                # Create text label
+                text = key.replace("_", " ").title()
+                preview_texts[key] = ctk.CTkLabel(preview_frames[key], text=text)
+                preview_texts[key].pack(pady=(5, 0))
+                
+                preview_col += 1
+                i += 1
+
+def draw_video_previews_from_frames(recording_settings, frame_dict):
+    """Update existing preview frames with new images"""
+    if not preview_frames:
+        establish_preview_frames(recording_settings)
+        
+    for key in ["video_raw", "video_annotated", "video_segmented"]:
+        if recording_settings.get(key) and key in frame_dict and key in preview_frames:
             try:
                 frame = frame_dict[key]
-                
-                # Convert BGR (OpenCV) to RGB (PIL)
                 if frame is not None:
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     img_pil = Image.fromarray(frame_rgb)
-                    img_pil = img_pil.resize((650, 450), Image.Resampling.LANCZOS)
-                    photo_img = ImageTk.PhotoImage(img_pil)
-
-                    image_frame.grid_columnconfigure(i, weight=1)
-
-                    preview_frame = ctk.CTkFrame(master=image_frame)
-                    preview_frame.grid(row=preview_row, column=preview_col, padx=10, pady=10)
-
-                    # Display image
-                    img_label = ctk.CTkLabel(master=preview_frame, image=photo_img, text="")
-                    img_label.image = photo_img  # Prevent garbage collection
-                    img_label.pack()
-
-                    # Display label text
-                    text = key.replace("_", " ").title()
-                    text_label = ctk.CTkLabel(master=preview_frame, text=text)
-                    text_label.pack(pady=(5, 0))
-
-                    preview_col += 1
-                    i += 1
+                    img_pil = img_pil.resize((650, 450))
+                    
+                    # Update existing label with new image
+                    ctk_img = ctk.CTkImage(light_image=img_pil, 
+                                         dark_image=img_pil, 
+                                         size=(650, 450))
+                    preview_labels[key].configure(image=ctk_img)
+                    preview_labels[key].image = ctk_img  # Keep reference
+                    
             except Exception as e:
-                print(f"Error displaying preview for {key}:", e)
+                print(f"Error updating preview for {key}:", e)
 
 def draw_video_previews_from_json_selection(recording_settings):
     # Add image viewing field to display image if the setting is selected in the submenu.
