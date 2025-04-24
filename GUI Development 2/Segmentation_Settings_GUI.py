@@ -3,6 +3,7 @@ from tkinter import ttk
 import json
 import os
 import customtkinter as ctk
+import easygui
 
 class SegmentationSettingsGUI:
     def __init__(self, root, callback=None):
@@ -60,6 +61,9 @@ class SegmentationSettingsGUI:
         self.default_values = {}
         self.comparative_values = {}
         self.entries = {}
+        
+        # Setup Segmentation Best Folder
+        self.segmentation_folder = ctk.StringVar(value="")
 
     def load_values(self):
         """Load values from JSON file or create default structure"""
@@ -80,7 +84,7 @@ class SegmentationSettingsGUI:
                     "neg_tolerance": "0"
                 } for field in self.fields
             }
-        
+        self.segmentation_folder.set(f.get('segmentation_folder', False))
         # Save default values
         try:
             with open(self.data_file, 'w') as f:
@@ -129,6 +133,11 @@ class SegmentationSettingsGUI:
         except Exception as e:
             print(f"Error saving class values: {e}")
 
+    def get_segmentation_folder(self):
+        folder_path = easygui.diropenbox(title="Select Folder to Save Recordings To")
+        if folder_path:
+            self.segmentation_folder.set(folder_path)
+
     def init_segmentation_tab(self):
         settings_frame = ctk.CTkFrame(self.seg_settings_tab)
         settings_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -150,6 +159,24 @@ class SegmentationSettingsGUI:
         )
         self.compare_checkbox.pack(anchor="w", padx=20, pady=10)
 
+        # Add segmentation folder selection
+        folder_frame = ctk.CTkFrame(settings_frame)
+        folder_frame.pack(fill="x", padx=20, pady=10)
+        
+        folder_label = ctk.CTkLabel(folder_frame, text="Segmentation Folder:")
+        folder_label.pack(side="left", padx=5)
+        
+        folder_path_label = ctk.CTkLabel(folder_frame, textvariable=self.segmentation_folder)
+        folder_path_label.pack(side="left", padx=5, fill="x", expand=True)
+        
+        select_folder_btn = ctk.CTkButton(
+            folder_frame,
+            text="Select Folder",
+            command=self.get_segmentation_folder,
+            width=100
+        )
+        select_folder_btn.pack(side="right", padx=5)
+
         # Add save button
         save_button = ctk.CTkButton(
             master=settings_frame,
@@ -169,7 +196,8 @@ class SegmentationSettingsGUI:
     def save_settings(self):
         settings = {
             "apply_segmentation": self.apply_segmentation.get(),
-            "compare_values": self.compare_values.get()
+            "compare_values": self.compare_values.get(),
+            "segmentation_folder": self.segmentation_folder.get()
         }
         
         try:
@@ -190,11 +218,13 @@ class SegmentationSettingsGUI:
             with open(self.settings_file, 'r') as f:
                 settings = json.load(f)
                 
-            # Only load segmentation-specific settings
+            # Load all settings
             if "apply_segmentation" in settings:
                 self.apply_segmentation.set(bool(settings["apply_segmentation"]))
             if "compare_values" in settings:
                 self.compare_values.set(bool(settings["compare_values"]))
+            if "segmentation_folder" in settings:
+                self.segmentation_folder.set(settings["segmentation_folder"])
                 
         except Exception as e:
             print(f"Error loading segmentation settings: {e}")

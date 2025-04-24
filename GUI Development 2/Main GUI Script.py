@@ -22,6 +22,7 @@ import threading
 from pypylon import pylon
 import sys
 import cv2
+import xml.etree.ElementTree as ET
 
 # Set theme and color
 ctk.set_appearance_mode("dark")
@@ -35,8 +36,13 @@ DEFAULT_IMG = os.path.join(ASSETS_DIR, "placeholder.png")
 
 global frame_count
 frame_count = 0
+
+
+global cam
 cam = 0
 cam_lock = threading.Lock()
+R_IP = "192.168.1.25"
+R_PORT = 59152
 
 global start_time_integer
 start_time_integer = 0
@@ -152,6 +158,7 @@ if os.path.exists("material_defaults.json"):
 
 if os.path.exists("recording_settings.json"):
     with open("recording_settings.json", 'r') as f:
+        global recording_settings
         recording_settings = json.load(f)
 
 # Buttons in Control Panel (stays in column 0)
@@ -214,17 +221,21 @@ def toggle_recording():
         record_button.configure(text="Stop Recording", 
                                 fg_color="red",
                                 hover_color="dark red")
+        
         is_recording = True
+        
         update_recording_loop()  # Start the loop
     else:
         record_button.configure(text="Start Recording", 
                                 fg_color="green",
                                 hover_color="dark green")
         is_recording = False     # Stop the loop
+        update_camera_status('idle')
 
 def update_recording_loop():
     if is_recording:
         try:
+            global recording_settings
             raw_image, annotated_image = video_acquiring(recording_settings, annotation_settings)
             frame_dict = {
                 "video_raw": raw_image,
@@ -247,6 +258,34 @@ record_button = ctk.CTkButton(buttons_frame,
                              height=50)
 record_button.grid(row=0, column=6, padx=20, pady=10, sticky="ew")
 
+def reset_recording():
+    global start_time_integer, frame_count
+    # Reset time tracking variables
+    start_time_integer = 0
+    frame_count = 0
+    
+    # Clear any existing preview frames
+    for widget in image_frame.winfo_children():
+        if isinstance(widget, ctk.CTkFrame):
+            widget.destroy()
+    
+    # Clear our tracking dictionaries
+    preview_frames.clear()
+    preview_labels.clear()
+    preview_texts.clear()
+    
+    # Update display with new empty previews based on current settings
+    draw_video_previews_from_json_selection(recording_settings)
+
+reset_button = ctk.CTkButton(buttons_frame,
+                             text = "Reset Recording",
+                             command = reset_recording,
+                             font=("Arial", 16, "bold"),
+                             fg_color="blue",
+                             hover_color="dark blue",
+                             width=200,
+                             height=50)
+reset_button.grid(row=0,column=7, padx=20, pady=10, sticky = "ew")
 
 
 def update_graphs():
@@ -261,9 +300,11 @@ def update_gui_from_settings():
     # Reload settings
     if os.path.exists("recording_settings.json"):
         with open("recording_settings.json", 'r') as f:
+            global recording_settings
             recording_settings = json.load(f)
     
     # Add image viewing field to display image if the setting is selected
+    reset_recording()
     draw_video_previews_from_json_selection(recording_settings)
     draw_image_previews_from_json_selection(recording_settings)
 
@@ -295,7 +336,6 @@ status_title.grid(row=0,column=0,sticky="w", padx=10, pady=5)
 camera_status_frame_title = ctk.CTkLabel(status_frame, text="Camera Status:", font=("Arial",12,"bold"))
 camera_status_frame_title.grid(row=0,column=1,sticky="nsew",padx=10,pady=5)
 
-
 # New big status display
 big_status_display = ctk.CTkLabel(
     status_frame, 
@@ -304,6 +344,30 @@ big_status_display = ctk.CTkLabel(
     text_color="yellow",               # Optional: use color to show status
     anchor="w"
 )
+
+def update_camera_status(state):
+    """
+    Updates the big_status_display label based on the current state.
+
+    Parameters:
+        state (str): One of ['idle', 'recording', 'waiting_rsi', 'tolerance_error']
+    """
+    status_mapping = {
+        'idle':       ("Idle", "yellow"),
+        'recording':  ("Recording", "green"),
+        'waiting_rsi': ("Waiting for RSI", "blue"),
+        'tolerance_error': ("Out of Tolerance", "red"),
+    }
+
+    if state not in status_mapping:
+        print(f"⚠️ Unknown status: {state}")
+        return
+
+    status_text, status_color = status_mapping[state]
+    big_status_display.configure(text=status_text, text_color=status_color)
+
+
+
 big_status_display.grid(row=1, column=0, sticky="ew", padx=10, pady=(5, 10))
 
 
@@ -327,17 +391,17 @@ def set_ET_time(recording_settings,time):
         time_increment = recording_settings.get("et_time")
 
         # Total number of unique steps before looping
-        total_steps = ((et_end - et_start) // et_step) + 1
+        total_steps = ((int(et_end) - int(et_start)) // int(et_step)) + 1
 
         # How many time steps have passed
-        steps_passed = int(time // time_increment)
+        steps_passed = int(time // int(time_increment))
 
         # Determine loop count and current step
         loop_count = steps_passed // total_steps
         current_step = steps_passed % total_steps
 
         # Calculate current exposure
-        exposure_time = et_start + current_step * et_step
+        exposure_time = int(et_start) + int(current_step) * int(et_step)
 
         return exposure_time, loop_count
 
@@ -498,20 +562,73 @@ def calculate_fps(frame_count, start_time):
     fps = frame_count / elapsed_time if elapsed_time > 0 else 0
     return fps, elapsed_time
 
+def calculate_instantaneous_fps(prev_time):
+    current_time = time.time()
+    time_diff = current_time - prev_time
+    fps = 1.0 / time_diff if time_diff > 0 else 0
+    return fps, current_time
+
+def parse_rsi_data(xml_data):
+    """Parses RSI XML data and extracts the CAM value."""
+    try:
+        root = ET.fromstring(xml_data)
+        cam_value = int(root.find("CAM").text)  # Convert CAM to integer (0 or 1)
+        return cam_value
+    except Exception as e:
+        print(f"Error parsing XML: {e}")
+        return None
+
+def receive_data():
+    """Receives RSI data, detects CAM transition, and updates the global `cam` variable."""
+    global cam
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.bind((R_IP, R_PORT))
+        print(f"Listening on {R_IP}:{R_PORT}")
+        
+        while True:
+            try:
+                data, addr = s.recvfrom(1024)
+                data_str = data.decode('utf-8')
+                
+                new_cam = parse_rsi_data(data_str)
+                if new_cam is not None:
+                    with cam_lock:
+                        cam = new_cam
+                else:
+                    with cam_lock:
+                        cam = 0
+            except Exception as e:
+                print(f"Error receiving data: {e}")
+
 def video_acquiring(recording_settings, annotation_settings):
     global frame_count
     global start_time_integer
-    if start_time_integer == 0:
-        global start_time
-        start_time = time.time()
-        
-        start_time_integer = 1
+    global start_time
+    global prev_frame_time
     
+    
+    if recording_settings.get("rsi_mode") == "Automatic":
+        update_camera_status("waiting_rsi")
+        cam_value = receive_data()
+        while cam_value != 1:
+            time.sleep(0.05)
+            cam_value = receive_data()
+
+        update_camera_status("recording")
+    else:
+        update_camera_status("recording")
+        
+    # Start timing
+    if start_time_integer == 0:
+        start_time = time.time()
+        prev_frame_time = start_time
+        start_time_integer = 1
+
     elapsed_time = time.time() - start_time
-    frame_count = frame_count + 1
+    frame_count += 1
 
     # Setup exposure time
-    [exposure_time, loop_count] = set_ET_time(recording_settings, elapsed_time)
+    exposure_time, loop_count = set_ET_time(recording_settings, elapsed_time)
     camera.ExposureTimeRaw.SetValue(int(exposure_time))
 
     # Grab frame
@@ -524,11 +641,13 @@ def video_acquiring(recording_settings, annotation_settings):
         img_array = grab_result.Array
         raw_rgb = cv2.cvtColor(img_array, cv2.COLOR_BAYER_BG2RGB)
 
+        # Calculate instantaneous FPS
+        fps, prev_frame_time = calculate_instantaneous_fps(prev_frame_time)
+
         if recording_settings.get("video_raw"):
             raw_image = raw_rgb.copy()
 
         if recording_settings.get("video_annotated"):
-            [fps, elapsed_time] = calculate_fps(frame_count, start_time)
             annotated_image = annotate_raw_image(
                 raw_rgb.copy(),
                 annotation_settings,
@@ -537,6 +656,13 @@ def video_acquiring(recording_settings, annotation_settings):
                 elapsed_time,
                 fps,
             )
+
+        # ⚠️ Check if RSI signal has ended (cam_value turned back to 0)
+        if recording_settings.get("rsi_mode") == "Automatic":
+            cam_value = receive_data()
+            if cam_value == 0:
+                print("📴 RSI signal ended — stopping recording.")
+                toggle_recording()
     else:
         print("❌ Grab failed or returned invalid result.")
 

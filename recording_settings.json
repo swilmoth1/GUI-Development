@@ -5,7 +5,7 @@
     "image_raw": false,
     "image_annotated": false,
     "image_segmented": false,
-    "et_mode": "Fixed",
+    "et_mode": "Iterate",
     "et_fixed": "1000",
     "et_time": "5",
     "et_start": "1000",
