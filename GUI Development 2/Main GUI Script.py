@@ -23,6 +23,8 @@ from pypylon import pylon
 import sys
 import cv2
 import xml.etree.ElementTree as ET
+from ultralytics import YOLO
+
 
 # Set theme and color
 ctk.set_appearance_mode("dark")
@@ -161,6 +163,11 @@ if os.path.exists("recording_settings.json"):
         global recording_settings
         recording_settings = json.load(f)
 
+if os.path.exists("segmentation_settings.json"):
+    with open("segmentation_settings.json", 'r') as f:
+        global segmentation_settings
+        segmentation_settings = json.load(f)
+
 # Buttons in Control Panel (stays in column 0)
 buttons_frame = ctk.CTkFrame(control_frame)
 buttons_frame.grid(row=1, column=0, padx=10, pady=5, sticky="w")
@@ -236,10 +243,11 @@ def update_recording_loop():
     if is_recording:
         try:
             global recording_settings
-            raw_image, annotated_image = video_acquiring(recording_settings, annotation_settings)
+            raw_image, annotated_image, segmented_image = video_acquiring(recording_settings, annotation_settings)
             frame_dict = {
                 "video_raw": raw_image,
-                "video_annotated": annotated_image
+                "video_annotated": annotated_image,
+                "video_segmented": segmented_image
             }
             draw_video_previews_from_frames(recording_settings, frame_dict)
         except Exception as e:
@@ -379,6 +387,69 @@ big_camera_display = ctk.CTkLabel(status_frame,
 big_camera_display.grid(row=1,column=1, sticky="ew", padx=10, pady= (5,10))
 # Optional: make sure the frame expands with window resizing
 status_frame.grid_columnconfigure(0, weight=1)
+
+def segment_raw_image(raw_image, segmentation_settings):
+    if not segmentation_settings.get("apply_segmentation", False):
+        return {}, raw_image
+
+    # Load YOLOv8 model
+    model_path = segmentation_settings["segmentation_file"]
+    model = YOLO(model_path)
+
+    # Perform segmentation
+    results = model(raw_image)[0]
+
+    # Exit early if nothing was detected
+    if results.masks is None or results.boxes is None or len(results.boxes) == 0:
+        return {}, raw_image
+
+    # Desired classes
+    target_classes = ["Welding Wire", "Solidification Zone", "Arc Flash"]
+    class_names = model.names
+    colors = {
+        "Welding Wire": (255, 0, 0),
+        "Solidification Zone": (0, 255, 0),
+        "Arc Flash": (0, 0, 255),
+    }
+
+    class_data = {}
+    overlay = raw_image.copy()
+
+    found_any = False  # Flag to check if any relevant class was detected
+
+    for mask, box, cls_id in zip(results.masks.data, results.boxes.data, results.boxes.cls):
+        class_name = class_names[int(cls_id)]
+
+        if class_name not in target_classes:
+            continue
+
+        found_any = True
+
+        # Get bounding box
+        x_min, y_min, x_max, y_max = map(int, box[:4])
+        mask_np = mask.cpu().numpy()
+
+        # Compute class area
+        area = int(np.sum(mask_np))
+
+        # Store class data
+        class_data[class_name] = {
+            "x_min": x_min,
+            "x_max": x_max,
+            "y_min": y_min,
+            "y_max": y_max,
+            "class_area": area
+        }
+
+        # Overlay colored mask
+        colored_mask = np.zeros_like(raw_image, dtype=np.uint8)
+        colored_mask[mask_np.astype(bool)] = colors[class_name]
+        overlay = cv2.addWeighted(overlay, 1.0, colored_mask, 0.5, 0)
+
+    if not found_any:
+        return {}, raw_image
+
+    return class_data, overlay
 
 def set_ET_time(recording_settings,time):
     if recording_settings.get("et_mode") == "Fixed":
@@ -605,7 +676,7 @@ def video_acquiring(recording_settings, annotation_settings):
     global start_time_integer
     global start_time
     global prev_frame_time
-    
+    global segmentation_settings
     
     if recording_settings.get("rsi_mode") == "Automatic":
         update_camera_status("waiting_rsi")
@@ -656,7 +727,8 @@ def video_acquiring(recording_settings, annotation_settings):
                 elapsed_time,
                 fps,
             )
-
+        if recording_settings.get("video_segmented"):
+            class_data, segmented_image = segment_raw_image(raw_image, segmentation_settings)
         # ⚠️ Check if RSI signal has ended (cam_value turned back to 0)
         if recording_settings.get("rsi_mode") == "Automatic":
             cam_value = receive_data()
@@ -666,7 +738,7 @@ def video_acquiring(recording_settings, annotation_settings):
     else:
         print("❌ Grab failed or returned invalid result.")
 
-    return raw_image, annotated_image
+    return raw_image, annotated_image, segmented_image
 
 def establish_preview_frames(recording_settings):
     """Create persistent preview frames once"""
@@ -696,28 +768,47 @@ def establish_preview_frames(recording_settings):
                 i += 1
 
 def draw_video_previews_from_frames(recording_settings, frame_dict):
-    """Update existing preview frames with new images"""
+    """Update existing preview frames with new images, resized based on number of active previews."""
     if not preview_frames:
         establish_preview_frames(recording_settings)
-        
-    for key in ["video_raw", "video_annotated", "video_segmented"]:
-        if recording_settings.get(key) and key in frame_dict and key in preview_frames:
-            try:
-                frame = frame_dict[key]
-                if frame is not None:
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    img_pil = Image.fromarray(frame_rgb)
-                    img_pil = img_pil.resize((650, 450))
-                    
-                    # Update existing label with new image
-                    ctk_img = ctk.CTkImage(light_image=img_pil, 
-                                         dark_image=img_pil, 
-                                         size=(650, 450))
-                    preview_labels[key].configure(image=ctk_img)
-                    preview_labels[key].image = ctk_img  # Keep reference
-                    
-            except Exception as e:
-                print(f"Error updating preview for {key}:", e)
+    
+    # Determine how many previews are being shown
+    
+    active_keys = [key for key in ["video_raw", "video_annotated", "video_segmented"]
+                   if recording_settings.get(key) and key in frame_dict]
+    
+    num_previews = len(active_keys)
+    if num_previews == 0:
+        return
+
+    # Base total preview area (you can adjust these)
+    max_width = 2000
+    max_height = 1000
+
+    # Calculate optimal preview size
+    preview_width = max_width // num_previews
+    preview_height = int(max_height * 0.5)  # adjust height proportionally
+
+    for key in active_keys:
+        try:
+            frame = frame_dict[key]
+            if frame is not None:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img_pil = Image.fromarray(frame_rgb)
+
+                img_pil = img_pil.resize((preview_width, preview_height))
+
+                # Update existing label with resized image
+                ctk_img = ctk.CTkImage(
+                    light_image=img_pil,
+                    dark_image=img_pil,
+                    size=(preview_width, preview_height)
+                )
+                preview_labels[key].configure(image=ctk_img)
+                preview_labels[key].image = ctk_img  # Prevent garbage collection
+
+        except Exception as e:
+            print(f"Error updating preview for {key}:", e)
 
 def draw_video_previews_from_json_selection(recording_settings):
     # Add image viewing field to display image if the setting is selected in the submenu.

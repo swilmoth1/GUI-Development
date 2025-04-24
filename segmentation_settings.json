@@ -1,5 +1,5 @@
 {
-    "apply_segmentation": false,
+    "apply_segmentation": true,
     "compare_values": false,
-    "segmentation_folder": "C:\\Users\\swilmoth\\OneDrive - University of Tennessee\\Basler Research\\model_training"
+    "segmentation_file": "C:\\Users\\swilmoth\\OneDrive - University of Tennessee\\Basler Research\\model_training\\train\\weights\\best.pt"
 }

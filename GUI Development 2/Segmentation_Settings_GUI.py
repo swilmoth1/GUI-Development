@@ -62,8 +62,8 @@ class SegmentationSettingsGUI:
         self.comparative_values = {}
         self.entries = {}
         
-        # Setup Segmentation Best Folder
-        self.segmentation_folder = ctk.StringVar(value="")
+        # Setup Segmentation Best File
+        self.segmentation_file = ctk.StringVar(value="")
 
     def load_values(self):
         """Load values from JSON file or create default structure"""
@@ -84,7 +84,7 @@ class SegmentationSettingsGUI:
                     "neg_tolerance": "0"
                 } for field in self.fields
             }
-        self.segmentation_folder.set(f.get('segmentation_folder', False))
+        self.segmentation_file.set(f.get('segmentation_file', False))
         # Save default values
         try:
             with open(self.data_file, 'w') as f:
@@ -133,10 +133,14 @@ class SegmentationSettingsGUI:
         except Exception as e:
             print(f"Error saving class values: {e}")
 
-    def get_segmentation_folder(self):
-        folder_path = easygui.diropenbox(title="Select Folder to Save Recordings To")
-        if folder_path:
-            self.segmentation_folder.set(folder_path)
+    def get_segmentation_file(self):
+        file_path = easygui.fileopenbox(
+            title="Select Segmentation Model File",
+            default="*.pt",  # Optional: filter for PyTorch model files
+            filetypes=["*.pt", "*.*"]
+        )
+        if file_path:
+            self.segmentation_file.set(file_path)
 
     def init_segmentation_tab(self):
         settings_frame = ctk.CTkFrame(self.seg_settings_tab)
@@ -159,23 +163,23 @@ class SegmentationSettingsGUI:
         )
         self.compare_checkbox.pack(anchor="w", padx=20, pady=10)
 
-        # Add segmentation folder selection
-        folder_frame = ctk.CTkFrame(settings_frame)
-        folder_frame.pack(fill="x", padx=20, pady=10)
+        # Add segmentation file selection
+        file_frame = ctk.CTkFrame(settings_frame)
+        file_frame.pack(fill="x", padx=20, pady=10)
         
-        folder_label = ctk.CTkLabel(folder_frame, text="Segmentation Folder:")
-        folder_label.pack(side="left", padx=5)
+        file_label = ctk.CTkLabel(file_frame, text="Segmentation File:")
+        file_label.pack(side="left", padx=5)
         
-        folder_path_label = ctk.CTkLabel(folder_frame, textvariable=self.segmentation_folder)
-        folder_path_label.pack(side="left", padx=5, fill="x", expand=True)
+        file_path_label = ctk.CTkLabel(file_frame, textvariable=self.segmentation_file)
+        file_path_label.pack(side="left", padx=5, fill="x", expand=True)
         
-        select_folder_btn = ctk.CTkButton(
-            folder_frame,
-            text="Select Folder",
-            command=self.get_segmentation_folder,
+        select_file_btn = ctk.CTkButton(
+            file_frame,
+            text="Select File",
+            command=self.get_segmentation_file,
             width=100
         )
-        select_folder_btn.pack(side="right", padx=5)
+        select_file_btn.pack(side="right", padx=5)
 
         # Add save button
         save_button = ctk.CTkButton(
@@ -197,7 +201,7 @@ class SegmentationSettingsGUI:
         settings = {
             "apply_segmentation": self.apply_segmentation.get(),
             "compare_values": self.compare_values.get(),
-            "segmentation_folder": self.segmentation_folder.get()
+            "segmentation_file": self.segmentation_file.get()
         }
         
         try:
@@ -223,8 +227,8 @@ class SegmentationSettingsGUI:
                 self.apply_segmentation.set(bool(settings["apply_segmentation"]))
             if "compare_values" in settings:
                 self.compare_values.set(bool(settings["compare_values"]))
-            if "segmentation_folder" in settings:
-                self.segmentation_folder.set(settings["segmentation_folder"])
+            if "segmentation_file" in settings:
+                self.segmentation_file.set(settings["segmentation_file"])
                 
         except Exception as e:
             print(f"Error loading segmentation settings: {e}")

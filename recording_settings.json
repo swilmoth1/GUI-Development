@@ -1,7 +1,7 @@
 {
     "video_raw": true,
     "video_annotated": true,
-    "video_segmented": false,
+    "video_segmented": true,
     "image_raw": false,
     "image_annotated": false,
     "image_segmented": false,
