@@ -978,7 +978,8 @@ def render_charts():
     # Clear the frame first
     for widget in chart_frame.winfo_children():
         widget.destroy()
-   
+    fig_w=3.5
+    fig_h=3.5
 
     # Draw frames for each graph type
     
@@ -996,7 +997,7 @@ def render_charts():
         x_position_frame.grid(row=0, column=column_index, padx=20, pady=20)
         x_position_frame_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
         if chart_metrics.get("X Average"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             x_average_frame = ctk.CTkFrame(x_position_frame)
             x_average_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1020,7 +1021,7 @@ def render_charts():
             canvas.get_tk_widget().grid(row=1,column=column_index)
             column_index=column_index+1
         if chart_metrics.get("X Maximum"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             x_maximum_frame = ctk.CTkFrame(x_position_frame)
             x_maximum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1045,7 +1046,7 @@ def render_charts():
             column_index=column_index+1
             
         if chart_metrics.get("X Minimum"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             x_minimum_frame = ctk.CTkFrame(x_position_frame)
             x_minimum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1078,7 +1079,7 @@ def render_charts():
         y_position_frame_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
         
         if chart_metrics.get("Y Average"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             y_average_frame = ctk.CTkFrame(y_position_frame)
             y_average_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1102,7 +1103,7 @@ def render_charts():
             canvas.get_tk_widget().grid(row=1,column=column_index)
             column_index=column_index+1
         if chart_metrics.get("Y Maximum"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             y_maximum_frame = ctk.CTkFrame(y_position_frame)
             y_maximum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1127,7 +1128,7 @@ def render_charts():
             column_index=column_index+1
             
         if chart_metrics.get("Y Minimum"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             y_minimum_frame = ctk.CTkFrame(y_position_frame)
             y_minimum_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1159,7 +1160,7 @@ def render_charts():
         position_std_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
         
         if chart_metrics.get("X Average Standard Deviation"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             x_avg_std_dev_frame = ctk.CTkFrame(position_std_frame)
             x_avg_std_dev_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1184,7 +1185,7 @@ def render_charts():
             column_index=column_index+1
             
         if chart_metrics.get("Y Average Standard Deviation"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             y_avg_std_dev_frame = ctk.CTkFrame(position_std_frame)
             y_avg_std_dev_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1216,7 +1217,7 @@ def render_charts():
         class_area_frame.grid(row=1, column=1, padx=20, pady=20)
         class_area_frame_label.grid(row=0,column=0,sticky="w", padx=10, pady=5)
         if chart_metrics.get("Class Area"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             class_area_sub_frame = ctk.CTkFrame(class_area_frame)
             class_area_sub_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
@@ -1242,7 +1243,7 @@ def render_charts():
             
     if show_charts.get("Class Area Standard Deviation"):
         if chart_metrics.get("Class Area"):
-            fig=Figure(figsize=(4,3),dpi=100)
+            fig=Figure(figsize=(fig_w,fig_h),dpi=100)
             ax = fig.add_subplot(111)
             class_std_dev_sub_frame = ctk.CTkFrame(class_area_frame)
             class_std_dev_sub_frame.grid(row=1,column=column_index, sticky = "w", padx=10, pady=5)
