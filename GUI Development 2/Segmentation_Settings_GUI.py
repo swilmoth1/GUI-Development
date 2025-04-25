@@ -199,19 +199,17 @@ class SegmentationSettingsGUI:
 
     def save_settings(self):
         settings = {
-            "apply_segmentation": self.apply_segmentation.get(),
-            "compare_values": self.compare_values.get(),
-            "segmentation_file": self.segmentation_file.get()
+            "apply_segmentation": bool(self.apply_segmentation.get()),
+            "compare_values": bool(self.compare_values.get()),
+            "segmentation_file": str(self.segmentation_file.get())
         }
         
         try:
             with open(self.settings_file, 'w') as f:
                 json.dump(settings, f, indent=4)
-                self.window.destroy()  # Destroy the window
+            self.window.destroy()
         except Exception as e:
             print(f"Error saving settings: {e}")
-            # Could add error message display here
-            
 
     def load_settings(self):
         """Load segmentation-specific settings"""

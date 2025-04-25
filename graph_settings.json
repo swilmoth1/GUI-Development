@@ -1,7 +1,7 @@
 {
     "metrics": {
         "X Average": true,
-        "X Maximum": false,
+        "X Maximum": true,
         "X Minimum": true,
         "Y Average": true,
         "Y Maximum": true,
@@ -9,14 +9,14 @@
         "X Average Standard Deviation": true,
         "Y Average Standard Deviation": true,
         "Class Area": true,
-        "Class Area Standard Deviation": true
+        "Class Area Standard Deviation": false
     },
     "show_charts": {
         "X Position Values": true,
         "Y Position Values": true,
         "Position Standard Deviations": true,
         "Class Area": true,
-        "Class Area Standard Deviation": true
+        "Class Area Standard Deviation": false
     },
     "save_charts": true,
     "chart_groups": {
@@ -41,5 +41,17 @@
             "Class Area Standard Deviation"
         ]
     },
-    "save_folder": "C:\\Users\\swilmoth\\Documents\\GitHub\\GUI-Development"
+    "frame_counts": {
+        "X Average": "10",
+        "X Maximum": "10",
+        "X Minimum": "10",
+        "Y Average": "10",
+        "Y Maximum": "10",
+        "Y Minimum": "10",
+        "X Average Standard Deviation": "10",
+        "Y Average Standard Deviation": "10",
+        "Class Area": "10",
+        "Class Area Standard Deviation": "10"
+    },
+    "save_folder": ""
 }

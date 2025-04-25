@@ -56,7 +56,7 @@ PORT = 139
 # Ensure assets directory exists
 if not os.path.exists(ASSETS_DIR):
     os.makedirs(ASSETS_DIR)
-
+global image_paths
 image_paths = {
     "video_raw": os.path.join(ASSETS_DIR, "Sample Raw Image.png"),
     "video_annotated": os.path.join(ASSETS_DIR, "Sample Annotated Image.png"),
@@ -144,6 +144,7 @@ control_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=5)
 #read the json file for the Graph Settings
 if os.path.exists("graph_settings.json"):
     with open("graph_settings.json", 'r') as f:
+        global graph_settings
         graph_settings = json.load(f)
 
 if os.path.exists("annotation_settings.json"):
@@ -671,12 +672,69 @@ def receive_data():
             except Exception as e:
                 print(f"Error receiving data: {e}")
 
+def calculate_metrics_over_frames(all_class_data, settings):
+    metrics_settings = settings.get("metrics", {})
+    frame_count_settings = settings.get("metric_frame_counts", {})  # Dict like {"X Average": "10", ...}
+
+    # Output structure
+    output_data = {metric: [] for metric in metrics_settings if metrics_settings[metric]}
+
+    # Group frames by metric requirements
+    grouped_frames = {}
+    for metric in output_data:
+        try:
+            count = int(frame_count_settings.get(metric, 1))
+        except ValueError:
+            count = 1
+        grouped_frames[metric] = [all_class_data[i:i + count] for i in range(0, len(all_class_data), count)]
+
+    # Metric name to data key mapping
+    metric_keys = {
+        "X Average": lambda d: (d["x_max"] + d["x_min"]) / 2,
+        "X Maximum": lambda d: d["x_max"],
+        "X Minimum": lambda d: d["x_min"],
+        "Y Average": lambda d: (d["y_max"] + d["y_min"]) / 2,
+        "Y Maximum": lambda d: d["y_max"],
+        "Y Minimum": lambda d: d["y_min"],
+        "X Average Standard Deviation": lambda d: (d["x_max"] + d["x_min"]) / 2,
+        "Y Average Standard Deviation": lambda d: (d["y_max"] + d["y_min"]) / 2,
+        "Class Area": lambda d: d["class_area"],
+        "Class Area Standard Deviation": lambda d: d["class_area"]
+    }
+
+    # Process each metric
+    for metric, frame_chunks in grouped_frames.items():
+        extractor = metric_keys.get(metric)
+        if extractor is None:
+            continue
+
+        for chunk in frame_chunks:
+            values = []
+            for frame_data in chunk:
+                for class_values in frame_data.values():
+                    values.append(extractor(class_values))
+
+            if not values:
+                output_data[metric].append(None)
+                continue
+
+            values_np = np.array(values)
+            if "Standard Deviation" in metric:
+                result = float(np.std(values_np))
+            else:
+                result = float(np.mean(values_np))
+
+            output_data[metric].append(result)
+
+    return output_data
+
 def video_acquiring(recording_settings, annotation_settings):
     global frame_count
     global start_time_integer
     global start_time
     global prev_frame_time
     global segmentation_settings
+    global image_paths
     
     if recording_settings.get("rsi_mode") == "Automatic":
         update_camera_status("waiting_rsi")
@@ -719,6 +777,7 @@ def video_acquiring(recording_settings, annotation_settings):
             raw_image = raw_rgb.copy()
 
         if recording_settings.get("video_annotated"):
+            
             annotated_image = annotate_raw_image(
                 raw_rgb.copy(),
                 annotation_settings,
@@ -728,7 +787,13 @@ def video_acquiring(recording_settings, annotation_settings):
                 fps,
             )
         if recording_settings.get("video_segmented"):
-            class_data, segmented_image = segment_raw_image(raw_image, segmentation_settings)
+            # Testing code
+            image_path = image_paths["image_raw"]
+            image = Image.open(image_path).convert('RGB')
+            sample_image = np.array(image, dtype=np.uint8)
+            class_data, segmented_image = segment_raw_image(sample_image, segmentation_settings)
+            # end testing code
+            # class_data, segmented_image = segment_raw_image(raw_image, segmentation_settings)
         # ⚠️ Check if RSI signal has ended (cam_value turned back to 0)
         if recording_settings.get("rsi_mode") == "Automatic":
             cam_value = receive_data()
@@ -738,6 +803,8 @@ def video_acquiring(recording_settings, annotation_settings):
     else:
         print("❌ Grab failed or returned invalid result.")
 
+    output_data=calculate_metrics_over_frames(class_data, graph_settings)
+    
     return raw_image, annotated_image, segmented_image
 
 def establish_preview_frames(recording_settings):
@@ -883,6 +950,8 @@ def draw_image_previews_from_json_selection(recording_settings):
                 
 draw_video_previews_from_json_selection(recording_settings)
 draw_image_previews_from_json_selection(recording_settings)
+
+
 
 
 def plot_feature_on_axes(ax, feature_name, x_data, y_data, desired_value, tol_pos, tol_neg, title, xlabel, ylabel):
@@ -1203,16 +1272,16 @@ def render_charts():
 
 
 # Graphical viewing
-if any (graph_settings.get("show_charts",{}).values()):
-    chart_window = ctk.CTkToplevel()
-    chart_window.title("Charts Display")
-    chart_window.geometry("800x600")
-    # Chart container
-    chart_frame = ctk.CTkFrame(chart_window)
-    chart_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+chart_window = ctk.CTkToplevel()
+chart_window.title("Charts Display")
+chart_window.geometry("800x600")
+# Chart container
+chart_frame = ctk.CTkFrame(chart_window)
+chart_frame.pack(fill="both", expand=True, padx=20, pady=20)
     
     
-    render_charts()
+render_charts()
     
 
 
