@@ -675,61 +675,63 @@ def receive_data():
             except Exception as e:
                 print(f"Error receiving data: {e}")
 
+x_average_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+frame_counter = 0  # Persistent frame counter
+
+
 def calculate_metrics_over_frames(all_class_data, settings):
+    global frame_counter, x_average_cumulative
+    
     metrics_settings = settings.get("metrics", {})
-    frame_count_settings = settings.get("metric_frame_counts", {})  # Dict like {"X Average": "10", ...}
+    frame_count_settings = settings.get("frame_counts", {})  # Example: {"X Average": 10}
 
-    # Output structure
-    output_data = {metric: [] for metric in metrics_settings if metrics_settings[metric]}
+    output_data = {metric: {} for metric in metrics_settings if metrics_settings[metric]}
 
-    # Group frames by metric requirements
-    grouped_frames = {}
-    for metric in output_data:
-        try:
-            count = int(frame_count_settings.get(metric, 1))
-        except ValueError:
-            count = 1
-        grouped_frames[metric] = [all_class_data[i:i + count] for i in range(0, len(all_class_data), count)]
+    # X Average calculation
+    if "X Average" in output_data:
+        # Safely handle possible None values
+        if all_class_data["Arc Flash"]["x_min"] is not None and all_class_data["Arc Flash"]["x_max"] is not None:
+            x_avg_arc_flash = (all_class_data["Arc Flash"]["x_min"] + all_class_data["Arc Flash"]["x_max"]) / 2
+            x_average_cumulative["Arc Flash"].append(x_avg_arc_flash)
 
-    # Metric name to data key mapping
-    metric_keys = {
-        "X Average": lambda d: (d["x_max"] + d["x_min"]) / 2,
-        "X Maximum": lambda d: d["x_max"],
-        "X Minimum": lambda d: d["x_min"],
-        "Y Average": lambda d: (d["y_max"] + d["y_min"]) / 2,
-        "Y Maximum": lambda d: d["y_max"],
-        "Y Minimum": lambda d: d["y_min"],
-        "X Average Standard Deviation": lambda d: (d["x_max"] + d["x_min"]) / 2,
-        "Y Average Standard Deviation": lambda d: (d["y_max"] + d["y_min"]) / 2,
-        "Class Area": lambda d: d["class_area"],
-        "Class Area Standard Deviation": lambda d: d["class_area"]
-    }
+        if all_class_data["Solidification Pool"]["x_min"] is not None and all_class_data["Solidification Pool"]["x_max"] is not None:
+            x_avg_solid_pool = (all_class_data["Solidification Pool"]["x_min"] + all_class_data["Solidification Pool"]["x_max"]) / 2
+            x_average_cumulative["Solidification Pool"].append(x_avg_solid_pool)
 
-    # Process each metric
-    for metric, frame_chunks in grouped_frames.items():
-        extractor = metric_keys.get(metric)
-        if extractor is None:
-            continue
+        if all_class_data["Welding Wire"]["x_min"] is not None and all_class_data["Welding Wire"]["x_max"] is not None:
+            x_avg_wire = (all_class_data["Welding Wire"]["x_min"] + all_class_data["Welding Wire"]["x_max"]) / 2
+            x_average_cumulative["Welding Wire"].append(x_avg_wire)
 
-        for chunk in frame_chunks:
-            values = []
-            for frame_data in chunk:
-                for class_values in frame_data.values():
-                    values.append(extractor(class_values))
+        frame_counter += 1
 
-            if not values:
-                output_data[metric].append(None)
-                continue
+        # Check if it's time to output
+        if frame_counter % int(frame_count_settings["X Average"]) == 0:
+            # Calculate means, but use 0 if no data
+            output_data["X Average"].setdefault("Arc Flash", []).append(
+                np.mean(x_average_cumulative["Arc Flash"]) if x_average_cumulative["Arc Flash"] else 0
+            )
+            output_data["X Average"].setdefault("Solidification Pool", []).append(
+                np.mean(x_average_cumulative["Solidification Pool"]) if x_average_cumulative["Solidification Pool"] else 0
+            )
+            output_data["X Average"].setdefault("Welding Wire", []).append(
+                np.mean(x_average_cumulative["Welding Wire"]) if x_average_cumulative["Welding Wire"] else 0
+            )
+            output_data["X Average"].setdefault("Graph Frame Index", []).append(frame_counter)
 
-            values_np = np.array(values)
-            if "Standard Deviation" in metric:
-                result = float(np.std(values_np))
-            else:
-                result = float(np.mean(values_np))
+            # Reset cumulative after averaging
+            x_average_cumulative = {
+                "Arc Flash": [],
+                "Solidification Pool": [],
+                "Welding Wire": []
+            }
+            graph_key = 1
+            return output_data, graph_key
 
-            output_data[metric].append(result)
-
-    return output_data
+    return None  # No output unless frame count matches
 
 def create_visualization(frame, masks, boxes, measurements):
     """Create visualization with masks and measurements."""
@@ -918,13 +920,17 @@ def video_acquiring(recording_settings, annotation_settings):
     else:
         print("❌ Grab failed or returned invalid result.")
     # X Average 
-    ax = axes["X Average"]
-    plot_feature_on_axes(ax,"Arc Flash",x_data = [10,11,12], y_data = [10,13,16])
+    # ax = axes["X Average"]
+    #plot_feature_on_axes(ax,"Arc Flash",x_data = [10,11,12], y_data = [10,13,16])   
+    #canvases["X Average"].draw()
     
-    canvases["X Average"].draw()
-    
-    output_data=calculate_metrics_over_frames(class_data, graph_settings)
-    
+    result=calculate_metrics_over_frames(measurements, graph_settings)
+    if result is not None:
+        output_data, graph_key = result
+        if graph_key == 1:
+            ax = axes["X Average"]
+            plot_feature_on_axes(ax,"Arc Flash",x_data = output_data["X Average"]["Graph Frame Index"], y_data = output_data["X Average"]["Arc Flash"])   
+            canvases["X Average"].draw()
     return raw_image, annotated_image, segmented_image
 
 def establish_preview_frames(recording_settings):

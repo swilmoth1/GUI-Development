@@ -9,14 +9,14 @@
         "X Average Standard Deviation": true,
         "Y Average Standard Deviation": true,
         "Class Area": true,
-        "Class Area Standard Deviation": false
+        "Class Area Standard Deviation": true
     },
     "show_charts": {
         "X Position Values": true,
         "Y Position Values": true,
         "Position Standard Deviations": true,
         "Class Area": true,
-        "Class Area Standard Deviation": false
+        "Class Area Standard Deviation": true
     },
     "save_charts": true,
     "chart_groups": {
