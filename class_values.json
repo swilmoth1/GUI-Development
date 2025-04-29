@@ -27,9 +27,9 @@
                 "neg_tolerance": "0"
             },
             "x_average": {
-                "value": "0",
-                "pos_tolerance": "0",
-                "neg_tolerance": "0"
+                "value": "640",
+                "pos_tolerance": "30",
+                "neg_tolerance": "40"
             },
             "area_average": {
                 "value": "50",
@@ -131,9 +131,9 @@
                 "neg_tolerance": "0"
             },
             "x_average": {
-                "value": "0",
-                "pos_tolerance": "0",
-                "neg_tolerance": "0"
+                "value": "640",
+                "pos_tolerance": "100",
+                "neg_tolerance": "100"
             },
             "area_average": {
                 "value": "20",

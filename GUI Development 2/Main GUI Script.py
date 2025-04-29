@@ -36,7 +36,12 @@ HISTORY_LENGTH = 100  # Number of frames to show in history
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 DEFAULT_IMG = os.path.join(ASSETS_DIR, "placeholder.png")
 
+global output_data
 global frame_count
+global line_refs
+global fill_refs
+fill_refs = {} 
+line_refs = {}
 frame_count = 0
 
 
@@ -153,6 +158,7 @@ if os.path.exists("annotation_settings.json"):
 
 if os.path.exists("class_values.json"):
     with open("class_values.json", 'r') as f:
+        global class_values
         class_values = json.load(f)
 
 if os.path.exists("material_defaults.json"):
@@ -674,6 +680,11 @@ def receive_data():
                         cam = 0
             except Exception as e:
                 print(f"Error receiving data: {e}")
+x_max_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
 
 x_average_cumulative = {
     "Arc Flash": [],
@@ -682,17 +693,29 @@ x_average_cumulative = {
 }
 frame_counter = 0  # Persistent frame counter
 
+output_data = {
+    "X Average": {
+        "Arc Flash": [],
+        "Solidification Pool": [],
+        "Welding Wire": [],
+        "Graph Frame Index": []
+    },
+    "X Maximum": {
+        "Arc Flash": [],
+        "Solidification Pool": [],
+        "Welding Wire": [],
+        "Graph Frame Index": []
+    }
+}
 
-def calculate_metrics_over_frames(all_class_data, settings):
-    global frame_counter, x_average_cumulative
-    
+def calculate_metrics_over_frames(all_class_data, settings, output_data):
+    global frame_counter, x_average_cumulative, x_max_cumulative 
+    graph_key = []
     metrics_settings = settings.get("metrics", {})
     frame_count_settings = settings.get("frame_counts", {})  # Example: {"X Average": 10}
 
-    output_data = {metric: {} for metric in metrics_settings if metrics_settings[metric]}
-
     # X Average calculation
-    if "X Average" in output_data:
+    if "X Average" in metrics_settings and metrics_settings["X Average"]:
         # Safely handle possible None values
         if all_class_data["Arc Flash"]["x_min"] is not None and all_class_data["Arc Flash"]["x_max"] is not None:
             x_avg_arc_flash = (all_class_data["Arc Flash"]["x_min"] + all_class_data["Arc Flash"]["x_max"]) / 2
@@ -706,21 +729,29 @@ def calculate_metrics_over_frames(all_class_data, settings):
             x_avg_wire = (all_class_data["Welding Wire"]["x_min"] + all_class_data["Welding Wire"]["x_max"]) / 2
             x_average_cumulative["Welding Wire"].append(x_avg_wire)
 
-        frame_counter += 1
+        
 
         # Check if it's time to output
-        if frame_counter % int(frame_count_settings["X Average"]) == 0:
-            # Calculate means, but use 0 if no data
-            output_data["X Average"].setdefault("Arc Flash", []).append(
+        if frame_counter != 0 and frame_counter % int(frame_count_settings.get("X Average", 10)) == 0:
+            # Ensure keys exist in output_data
+            if "X Average" not in output_data:
+                output_data["X Average"] = {
+                    "Arc Flash": [],
+                    "Solidification Pool": [],
+                    "Welding Wire": [],
+                    "Graph Frame Index": []
+                }
+
+            output_data["X Average"]["Arc Flash"].append(
                 np.mean(x_average_cumulative["Arc Flash"]) if x_average_cumulative["Arc Flash"] else 0
             )
-            output_data["X Average"].setdefault("Solidification Pool", []).append(
+            output_data["X Average"]["Solidification Pool"].append(
                 np.mean(x_average_cumulative["Solidification Pool"]) if x_average_cumulative["Solidification Pool"] else 0
             )
-            output_data["X Average"].setdefault("Welding Wire", []).append(
+            output_data["X Average"]["Welding Wire"].append(
                 np.mean(x_average_cumulative["Welding Wire"]) if x_average_cumulative["Welding Wire"] else 0
             )
-            output_data["X Average"].setdefault("Graph Frame Index", []).append(frame_counter)
+            output_data["X Average"]["Graph Frame Index"].append(frame_counter)
 
             # Reset cumulative after averaging
             x_average_cumulative = {
@@ -728,10 +759,54 @@ def calculate_metrics_over_frames(all_class_data, settings):
                 "Solidification Pool": [],
                 "Welding Wire": []
             }
-            graph_key = 1
-            return output_data, graph_key
 
-    return None  # No output unless frame count matches
+            graph_key.append("X Average")
+    
+    # X Maximum Calculation
+    if "X Maximum" in metrics_settings and metrics_settings["X Maximum"]:
+        
+        if all_class_data["Arc Flash"]["x_max"] is not None:
+            x_max_cumulative["Arc Flash"].append(all_class_data["Arc Flash"]["x_max"])
+
+        if all_class_data["Solidification Pool"]["x_max"] is not None:
+            x_max_cumulative["Solidification Pool"].append(all_class_data["Solidification Pool"]["x_max"])
+
+        if all_class_data["Welding Wire"]["x_max"] is not None:
+            x_max_cumulative["Welding Wire"].append(all_class_data["Welding Wire"]["x_max"])
+
+        # test=int(frame_count_settings.get('X Maximum', 10))
+        if frame_counter != 0 and frame_counter % int(frame_count_settings.get('X Maximum', 10)) == 0:
+            if "X Maximum" not in output_data:
+                output_data["X Maxmimum"] = {
+                    "Arc Flash": [],
+                    "Solidification Pool": [],
+                    "Welding Wire": [],
+                    "Graph Frame Index": []
+                }
+                
+            output_data['X Maximum']["Arc Flash"].append(
+                np.mean(x_max_cumulative["Arc Flash"]) if x_max_cumulative["Arc Flash"] else 0
+            )
+            output_data['X Maximum']["Solidification Pool"].append(
+                np.mean(x_max_cumulative["Solidification Pool"]) if x_max_cumulative["Solidification Pool"] else 0
+            )
+            output_data['X Maximum']["Welding Wire"].append(
+                np.mean(x_max_cumulative["Welding Wire"]) if x_max_cumulative["Welding Wire"] else 0
+            )
+            output_data['X Maximum']["Graph Frame Index"].append(frame_counter)
+
+            # Reset cumulative after averaging
+            x_max_cumulative = {
+                "Arc Flash": [],
+                "Solidification Pool": [],
+                "Welding Wire": []
+            }
+
+            graph_key.append("X Maximum")
+        frame_counter += 1
+        return output_data, graph_key
+    
+    return None
 
 def create_visualization(frame, masks, boxes, measurements):
     """Create visualization with masks and measurements."""
@@ -849,6 +924,7 @@ def video_acquiring(recording_settings, annotation_settings):
     global prev_frame_time
     global segmentation_settings
     global image_paths
+    global output_data
     
     if recording_settings.get("rsi_mode") == "Automatic":
         update_camera_status("waiting_rsi")
@@ -924,13 +1000,66 @@ def video_acquiring(recording_settings, annotation_settings):
     #plot_feature_on_axes(ax,"Arc Flash",x_data = [10,11,12], y_data = [10,13,16])   
     #canvases["X Average"].draw()
     
-    result=calculate_metrics_over_frames(measurements, graph_settings)
+    
+    result = calculate_metrics_over_frames(measurements, graph_settings, output_data)
     if result is not None:
         output_data, graph_key = result
-        if graph_key == 1:
-            ax = axes["X Average"]
-            plot_feature_on_axes(ax,"Arc Flash",x_data = output_data["X Average"]["Graph Frame Index"], y_data = output_data["X Average"]["Arc Flash"])   
+        if "X Average" in graph_key:
+            # X Average
+            for feature in ["Arc Flash","Solidification Pool","Welding Wire"]:
+                ax = axes["X Average"]
+                x_data = output_data["X Average"]["Graph Frame Index"]
+                y_data = output_data["X Average"][feature]
+                if feature == "Solidification Pool":
+                    feature = "Solidification Zone"
+                    
+                desired_value=int(class_values[str(material_selection)][feature]["x_average"]["value"])
+                tol_pos=int(class_values[str(material_selection)][feature]["x_average"]["pos_tolerance"])
+                tol_neg=int(class_values[str(material_selection)][feature]["x_average"]["pos_tolerance"])
+                # desired_value=int(data['Welding Wire']['x_average']['value']),
+                #                     tol_pos=int(data['Welding Wire']['x_average']['pos_tolerance']),
+                #                     tol_neg=int(data['Welding Wire']['x_average']['neg_tolerance']))
+                plot_feature_on_axes(
+                    ax, 
+                    feature, 
+                    x_data, 
+                    y_data,
+                    desired_value,
+                    tol_pos,
+                    tol_neg,
+                    "X Average"
+                )
+            
             canvases["X Average"].draw()
+            
+        if "X Maximum" in graph_key:
+        # X Average
+            for feature in ["Arc Flash","Solidification Pool","Welding Wire"]:
+                ax = axes["X Maximum"]
+                x_data = output_data["X Maximum"]["Graph Frame Index"]
+                y_data = output_data["X Maximum"][feature]
+                if feature == "Solidification Pool":
+                    feature = "Solidification Zone"
+                    
+                desired_value=int(class_values[str(material_selection)][feature]["x_max"]["value"])
+                tol_pos=int(class_values[str(material_selection)][feature]["x_max"]["pos_tolerance"])
+                tol_neg=int(class_values[str(material_selection)][feature]["x_max"]["pos_tolerance"])
+                # desired_value=int(data['Welding Wire']['x_average']['value']),
+                #                     tol_pos=int(data['Welding Wire']['x_average']['pos_tolerance']),
+                #                     tol_neg=int(data['Welding Wire']['x_average']['neg_tolerance']))
+                plot_feature_on_axes(
+                    ax, 
+                    feature, 
+                    x_data, 
+                    y_data,
+                    desired_value,
+                    tol_pos,
+                    tol_neg,
+                    "X Maximum"
+                )
+        
+            canvases["X Maximum"].draw()
+    
     return raw_image, annotated_image, segmented_image
 
 def establish_preview_frames(recording_settings):
@@ -1080,19 +1209,9 @@ draw_image_previews_from_json_selection(recording_settings)
 
 
 
-def plot_feature_on_axes(ax, feature_name, x_data, y_data, desired_value=None, tol_pos=None, tol_neg=None):
-    """
-    Plot feature data onto an existing Axes without changing titles or labels.
-
-    Parameters:
-        ax (matplotlib.axes.Axes): The Axes to plot on.
-        feature_name (str): Name of the feature for labeling and color.
-        x_data (array-like): X-axis data.
-        y_data (array-like): Y-axis data.
-        desired_value (float, optional): Centerline value for tolerance band.
-        tol_pos (float, optional): Positive tolerance above desired_value.
-        tol_neg (float, optional): Negative tolerance below desired_value.
-    """
+def plot_feature_on_axes(ax, feature_name, x_data, y_data,
+                         desired_value=None, tol_pos=None, tol_neg=None,
+                         graph_key=None):
     FEATURE_COLORS = {
         "Solidification Zone": "#1f77b4",
         "Welding Wire": "#ff7f0e",
@@ -1101,17 +1220,48 @@ def plot_feature_on_axes(ax, feature_name, x_data, y_data, desired_value=None, t
 
     color = FEATURE_COLORS.get(feature_name, "black")
 
-    # Plot the main feature line
-    ax.plot(x_data, y_data, label=feature_name, color=color)
+    # Ensure storage dicts exist
+    if graph_key not in line_refs:
+        line_refs[graph_key] = {}
+    if graph_key not in fill_refs:
+        fill_refs[graph_key] = {}
 
-    # Optional: Draw tolerance band if values provided
+    # --- Plot or update line ---
+    if feature_name not in line_refs[graph_key]:
+        line, = ax.plot(x_data, y_data, label=feature_name, color=color)
+        line_refs[graph_key][feature_name] = line
+    else:
+        line = line_refs[graph_key][feature_name]
+        line.set_xdata(x_data)
+        line.set_ydata(y_data)
+
+    # --- Plot or update shaded tolerance band ---
     if desired_value is not None and tol_pos is not None and tol_neg is not None:
-        ax.axhline(desired_value, color=color, linestyle='--', linewidth=1)
-        ax.fill_between(x_data, desired_value - tol_neg, desired_value + tol_pos, color=color, alpha=0.2)
+        lower_bound = desired_value - tol_neg
+        upper_bound = desired_value + tol_pos
 
-    # Update the legend to include the new line
+        # Remove old fill if it exists
+        if feature_name in fill_refs[graph_key]:
+            fill = fill_refs[graph_key][feature_name]
+            fill.remove()
+
+        # Create new fill spanning full visible x-range
+        x_min, x_max = min(x_data), max(x_data)
+        fill = ax.axhspan(lower_bound, upper_bound, color=color, alpha=0.2)
+        fill_refs[graph_key][feature_name] = fill
+
+        # Draw dashed centerline at desired value
+        ax.axhline(desired_value, color=color, linestyle='--', linewidth=1)
+
+    # Adjust x-axis to start at the first x_data point
+    x_min, x_max = min(x_data), max(x_data)
+    if x_min == x_max:
+        x_min -= 0.5
+        x_max += 0.5
+    ax.set_xlim(left=x_min, right=x_max)
+    ax.relim()
+    ax.autoscale_view(scalex=False, scaley=True)
     ax.legend()
-    ax.autoscale_view()
 
 def render_charts():
     # Clear the frame first
