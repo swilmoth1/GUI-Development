@@ -691,6 +691,52 @@ x_average_cumulative = {
     "Solidification Pool": [],
     "Welding Wire": []
 }
+
+x_min_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+
+y_max_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+
+y_average_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+
+y_min_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+
+area_average_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+area_std_deviation_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+y_avg_std_deviation_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+x_avg_std_deviation_cumulative = {
+    "Arc Flash": [],
+    "Solidification Pool": [],
+    "Welding Wire": []
+}
+
 frame_counter = 0  # Persistent frame counter
 
 output_data = {
@@ -708,105 +754,70 @@ output_data = {
     }
 }
 
+# Global metric configuration
+class_names = ["Arc Flash", "Solidification Pool", "Welding Wire"]
+metric_configs = {
+    "X Average": {"fields": ("x_min", "x_max"), "func": lambda x1, x2: (x1 + x2) / 2},
+    "X Maximum": {"fields": ("x_max",), "func": lambda x: x},
+    "X Minimum": {"fields": ("x_min",), "func": lambda x: x},
+    "Y Average": {"fields": ("y_min", "y_max"), "func": lambda y1, y2: (y1 + y2) / 2},
+    "Y Maximum": {"fields": ("y_max",), "func": lambda y: y},
+    "Y Minimum": {"fields": ("y_min",), "func": lambda y: y},
+}
+
+# Initialize cumulative data structures
+cumulative_data = {
+    metric: {class_name: [] for class_name in class_names}
+    for metric in metric_configs
+}
+
+def compute_and_append(metric, class_name, values, cumulative_data):
+    func = metric_configs[metric]["func"]
+    result = func(*values) if len(values) > 1 else func(values[0])
+    cumulative_data[metric][class_name].append(result)
+
+def should_output(metric, frame_counter, frame_count_settings):
+    count = frame_count_settings.get(metric, 10)
+    return frame_counter != 0 and frame_counter % int(count) == 0
+
+def output_metric_data(metric, frame_counter, cumulative_data, output_data):
+    if metric not in output_data:
+        output_data[metric] = {name: [] for name in class_names}
+        output_data[metric]["Graph Frame Index"] = []
+
+    for class_name in class_names:
+        values = cumulative_data[metric][class_name]
+        avg = np.mean(values) if values else 0
+        output_data[metric][class_name].append(avg)
+
+    output_data[metric]["Graph Frame Index"].append(frame_counter)
+
+    # Reset cumulative values for this metric
+    for class_name in class_names:
+        cumulative_data[metric][class_name].clear()
+
 def calculate_metrics_over_frames(all_class_data, settings, output_data):
-    global frame_counter, x_average_cumulative, x_max_cumulative 
+    global frame_counter
     graph_key = []
     metrics_settings = settings.get("metrics", {})
-    frame_count_settings = settings.get("frame_counts", {})  # Example: {"X Average": 10}
+    frame_count_settings = settings.get("frame_counts", {})
 
-    # X Average calculation
-    if "X Average" in metrics_settings and metrics_settings["X Average"]:
-        # Safely handle possible None values
-        if all_class_data["Arc Flash"]["x_min"] is not None and all_class_data["Arc Flash"]["x_max"] is not None:
-            x_avg_arc_flash = (all_class_data["Arc Flash"]["x_min"] + all_class_data["Arc Flash"]["x_max"]) / 2
-            x_average_cumulative["Arc Flash"].append(x_avg_arc_flash)
+    for metric, config in metric_configs.items():
+        if not metrics_settings.get(metric):
+            continue
 
-        if all_class_data["Solidification Pool"]["x_min"] is not None and all_class_data["Solidification Pool"]["x_max"] is not None:
-            x_avg_solid_pool = (all_class_data["Solidification Pool"]["x_min"] + all_class_data["Solidification Pool"]["x_max"]) / 2
-            x_average_cumulative["Solidification Pool"].append(x_avg_solid_pool)
+        for class_name in class_names:
+            class_data = all_class_data[class_name]
+            values = [class_data.get(field) for field in config["fields"]]
 
-        if all_class_data["Welding Wire"]["x_min"] is not None and all_class_data["Welding Wire"]["x_max"] is not None:
-            x_avg_wire = (all_class_data["Welding Wire"]["x_min"] + all_class_data["Welding Wire"]["x_max"]) / 2
-            x_average_cumulative["Welding Wire"].append(x_avg_wire)
+            if all(v is not None for v in values):
+                compute_and_append(metric, class_name, values, cumulative_data)
 
-        
-
-        # Check if it's time to output
-        if frame_counter != 0 and frame_counter % int(frame_count_settings.get("X Average", 10)) == 0:
-            # Ensure keys exist in output_data
-            if "X Average" not in output_data:
-                output_data["X Average"] = {
-                    "Arc Flash": [],
-                    "Solidification Pool": [],
-                    "Welding Wire": [],
-                    "Graph Frame Index": []
-                }
-
-            output_data["X Average"]["Arc Flash"].append(
-                np.mean(x_average_cumulative["Arc Flash"]) if x_average_cumulative["Arc Flash"] else 0
-            )
-            output_data["X Average"]["Solidification Pool"].append(
-                np.mean(x_average_cumulative["Solidification Pool"]) if x_average_cumulative["Solidification Pool"] else 0
-            )
-            output_data["X Average"]["Welding Wire"].append(
-                np.mean(x_average_cumulative["Welding Wire"]) if x_average_cumulative["Welding Wire"] else 0
-            )
-            output_data["X Average"]["Graph Frame Index"].append(frame_counter)
-
-            # Reset cumulative after averaging
-            x_average_cumulative = {
-                "Arc Flash": [],
-                "Solidification Pool": [],
-                "Welding Wire": []
-            }
-
-            graph_key.append("X Average")
-    
-    # X Maximum Calculation
-    if "X Maximum" in metrics_settings and metrics_settings["X Maximum"]:
-        
-        if all_class_data["Arc Flash"]["x_max"] is not None:
-            x_max_cumulative["Arc Flash"].append(all_class_data["Arc Flash"]["x_max"])
-
-        if all_class_data["Solidification Pool"]["x_max"] is not None:
-            x_max_cumulative["Solidification Pool"].append(all_class_data["Solidification Pool"]["x_max"])
-
-        if all_class_data["Welding Wire"]["x_max"] is not None:
-            x_max_cumulative["Welding Wire"].append(all_class_data["Welding Wire"]["x_max"])
-
-        # test=int(frame_count_settings.get('X Maximum', 10))
-        if frame_counter != 0 and frame_counter % int(frame_count_settings.get('X Maximum', 10)) == 0:
-            if "X Maximum" not in output_data:
-                output_data["X Maxmimum"] = {
-                    "Arc Flash": [],
-                    "Solidification Pool": [],
-                    "Welding Wire": [],
-                    "Graph Frame Index": []
-                }
-                
-            output_data['X Maximum']["Arc Flash"].append(
-                np.mean(x_max_cumulative["Arc Flash"]) if x_max_cumulative["Arc Flash"] else 0
-            )
-            output_data['X Maximum']["Solidification Pool"].append(
-                np.mean(x_max_cumulative["Solidification Pool"]) if x_max_cumulative["Solidification Pool"] else 0
-            )
-            output_data['X Maximum']["Welding Wire"].append(
-                np.mean(x_max_cumulative["Welding Wire"]) if x_max_cumulative["Welding Wire"] else 0
-            )
-            output_data['X Maximum']["Graph Frame Index"].append(frame_counter)
-
-            # Reset cumulative after averaging
-            x_max_cumulative = {
-                "Arc Flash": [],
-                "Solidification Pool": [],
-                "Welding Wire": []
-            }
-
-            graph_key.append("X Maximum")
-        frame_counter += 1
-        return output_data, graph_key
-    
-    return None
+        if should_output(metric, frame_counter, frame_count_settings):
+            output_metric_data(metric, frame_counter, cumulative_data, output_data)
+            graph_key.append(metric)
+    frame_counter = frame_counter +1
+    return graph_key
 
 def create_visualization(frame, masks, boxes, measurements):
     """Create visualization with masks and measurements."""
