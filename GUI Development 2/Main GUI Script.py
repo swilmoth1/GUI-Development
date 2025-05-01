@@ -257,8 +257,7 @@ def update_recording_loop():
                 "video_segmented": segmented_image
             }
             draw_video_previews_from_frames(recording_settings, frame_dict)
-        except Exception as e:
-            print(f"Error in recording loop: {e}")
+        
         finally:
             # Schedule next update
             window.after(30, update_recording_loop)
@@ -757,12 +756,17 @@ output_data = {
 # Global metric configuration
 class_names = ["Arc Flash", "Solidification Pool", "Welding Wire"]
 metric_configs = {
-    "X Average": {"fields": ("x_min", "x_max"), "func": lambda x1, x2: (x1 + x2) / 2},
-    "X Maximum": {"fields": ("x_max",), "func": lambda x: x},
-    "X Minimum": {"fields": ("x_min",), "func": lambda x: x},
-    "Y Average": {"fields": ("y_min", "y_max"), "func": lambda y1, y2: (y1 + y2) / 2},
-    "Y Maximum": {"fields": ("y_max",), "func": lambda y: y},
-    "Y Minimum": {"fields": ("y_min",), "func": lambda y: y},
+    "X Average": {"fields": ("x_min", "x_max"), "func": lambda x1, x2: (x1 + x2) / 2, "type": "average"},
+    "X Maximum": {"fields": ("x_max",), "func": lambda x: x, "type": "average"},
+    "X Minimum": {"fields": ("x_min",), "func": lambda x: x, "type": "average"},
+    "Y Average": {"fields": ("y_min", "y_max"), "func": lambda y1, y2: (y1 + y2) / 2, "type": "average"},
+    "Y Maximum": {"fields": ("y_max",), "func": lambda y: y, "type": "average"},
+    "Y Minimum": {"fields": ("y_min",), "func": lambda y: y, "type": "average"},
+
+    "Class Area": {"fields": ("area",), "func": lambda a: a, "type": "average"},
+    "Class Area Standard Deviation": {"fields": ("area",), "func": np.std, "type": "std"},
+    "Y Average Standard Deviation": {"fields": ("y_average",), "func": np.std, "type": "std"},
+    "X Average Standard Deviation": {"fields": ("x_average",), "func": np.std, "type": "std"},
 }
 
 # Initialize cumulative data structures
@@ -772,9 +776,19 @@ cumulative_data = {
 }
 
 def compute_and_append(metric, class_name, values, cumulative_data):
-    func = metric_configs[metric]["func"]
-    result = func(*values) if len(values) > 1 else func(values[0])
-    cumulative_data[metric][class_name].append(result)
+    if None in values:
+        return
+
+    metric_type = metric_configs[metric]["type"]
+
+    if metric_type == "average":
+        func = metric_configs[metric]["func"]
+        result = func(*values) if len(values) > 1 else func(values[0])
+        cumulative_data[metric][class_name].append(result)
+    
+    elif metric_type == "std":
+        # For std metrics, just store the raw input value(s) for now
+        cumulative_data[metric][class_name].extend(values)
 
 def should_output(metric, frame_counter, frame_count_settings):
     count = frame_count_settings.get(metric, 10)
@@ -785,14 +799,26 @@ def output_metric_data(metric, frame_counter, cumulative_data, output_data):
         output_data[metric] = {name: [] for name in class_names}
         output_data[metric]["Graph Frame Index"] = []
 
+    metric_type = metric_configs[metric]["type"]
+    func = metric_configs[metric]["func"]
+
     for class_name in class_names:
         values = cumulative_data[metric][class_name]
-        avg = np.mean(values) if values else 0
-        output_data[metric][class_name].append(avg)
+        
+        if not values:
+            output = 0
+        elif metric_type == "average":
+            output = np.mean(values)
+        elif metric_type == "std":
+            output = np.std(values)
+        else:
+            output = 0
+
+        output_data[metric][class_name].append(output)
 
     output_data[metric]["Graph Frame Index"].append(frame_counter)
 
-    # Reset cumulative values for this metric
+    # Reset for next batch
     for class_name in class_names:
         cumulative_data[metric][class_name].clear()
 
@@ -927,6 +953,19 @@ def process_frame(frame):
                             })
         
         return data, largest_masks, largest_boxes
+global metric_to_class_key
+metric_to_class_key = {
+    "X Average": "x_average",
+    "X Maximum": "x_max",
+    "X Minimum": "x_min",
+    "Y Average": "y_average",
+    "Y Maximum": "y_max",
+    "Y Minimum": "y_min",
+    "X Average Standard Deviation" : "x_avg_std_deviation",
+    "Y Average Standard Deviation" : "y_avg_std_deviation",
+    "Class Area" : "area_average",
+    "Class Area Standard Deviation" : "area_std_deviation"
+}
 
 def video_acquiring(recording_settings, annotation_settings):
     global frame_count
@@ -936,6 +975,7 @@ def video_acquiring(recording_settings, annotation_settings):
     global segmentation_settings
     global image_paths
     global output_data
+    global metric_to_class_key
     
     if recording_settings.get("rsi_mode") == "Automatic":
         update_camera_status("waiting_rsi")
@@ -1013,63 +1053,32 @@ def video_acquiring(recording_settings, annotation_settings):
     
     
     result = calculate_metrics_over_frames(measurements, graph_settings, output_data)
-    if result is not None:
-        output_data, graph_key = result
-        if "X Average" in graph_key:
-            # X Average
-            for feature in ["Arc Flash","Solidification Pool","Welding Wire"]:
-                ax = axes["X Average"]
-                x_data = output_data["X Average"]["Graph Frame Index"]
-                y_data = output_data["X Average"][feature]
-                if feature == "Solidification Pool":
-                    feature = "Solidification Zone"
-                    
-                desired_value=int(class_values[str(material_selection)][feature]["x_average"]["value"])
-                tol_pos=int(class_values[str(material_selection)][feature]["x_average"]["pos_tolerance"])
-                tol_neg=int(class_values[str(material_selection)][feature]["x_average"]["pos_tolerance"])
-                # desired_value=int(data['Welding Wire']['x_average']['value']),
-                #                     tol_pos=int(data['Welding Wire']['x_average']['pos_tolerance']),
-                #                     tol_neg=int(data['Welding Wire']['x_average']['neg_tolerance']))
-                plot_feature_on_axes(
-                    ax, 
-                    feature, 
-                    x_data, 
-                    y_data,
-                    desired_value,
-                    tol_pos,
-                    tol_neg,
-                    "X Average"
-                )
-            
-            canvases["X Average"].draw()
-            
-        if "X Maximum" in graph_key:
-        # X Average
-            for feature in ["Arc Flash","Solidification Pool","Welding Wire"]:
-                ax = axes["X Maximum"]
-                x_data = output_data["X Maximum"]["Graph Frame Index"]
-                y_data = output_data["X Maximum"][feature]
-                if feature == "Solidification Pool":
-                    feature = "Solidification Zone"
-                    
-                desired_value=int(class_values[str(material_selection)][feature]["x_max"]["value"])
-                tol_pos=int(class_values[str(material_selection)][feature]["x_max"]["pos_tolerance"])
-                tol_neg=int(class_values[str(material_selection)][feature]["x_max"]["pos_tolerance"])
-                # desired_value=int(data['Welding Wire']['x_average']['value']),
-                #                     tol_pos=int(data['Welding Wire']['x_average']['pos_tolerance']),
-                #                     tol_neg=int(data['Welding Wire']['x_average']['neg_tolerance']))
-                plot_feature_on_axes(
-                    ax, 
-                    feature, 
-                    x_data, 
-                    y_data,
-                    desired_value,
-                    tol_pos,
-                    tol_neg,
-                    "X Maximum"
-                )
+    if result:
+        for key in result:
         
-            canvases["X Maximum"].draw()
+            ax=axes[key]
+            metric=metric_to_class_key[key]
+            for feature in ["Arc Flash","Solidification Pool","Welding Wire"]:
+                x_data = output_data[key]["Graph Frame Index"]
+                y_data = output_data[key][feature]
+                if feature == "Solidification Pool":
+                    feature = "Solidification Zone"
+                
+                
+                desired_value = int(class_values[str(material_selection)][feature][metric]["value"])
+                tol_pos=int(class_values[str(material_selection)][feature][metric]["pos_tolerance"])
+                tol_neg=int(class_values[str(material_selection)][feature][metric]["pos_tolerance"])
+                plot_feature_on_axes(
+                        ax, 
+                        feature, 
+                        x_data, 
+                        y_data,
+                        desired_value,
+                        tol_pos,
+                        tol_neg,
+                        key
+                    )
+            canvases[key].draw()
     
     return raw_image, annotated_image, segmented_image
 
@@ -1565,7 +1574,7 @@ def render_charts():
                                 tol_neg=int(data['Arc Flash']['x_avg_std_deviation']['neg_tolerance']))
             canvas = FigureCanvasTkAgg(fig, master=x_avg_std_dev_frame)
             canvas.draw()
-            canvases["X Avg Std Dev"] = canvas  # <--- SAVE IT
+            canvases["X Average Standard Deviation"] = canvas  # <--- SAVE IT
             canvas.get_tk_widget().grid(row=1,column=column_index)
             column_index=column_index+1
             
@@ -1599,7 +1608,7 @@ def render_charts():
                                 tol_pos=int(data['Arc Flash']['y_avg_std_deviation']['pos_tolerance']),
                                 tol_neg=int(data['Arc Flash']['y_avg_std_deviation']['neg_tolerance']))
             canvas = FigureCanvasTkAgg(fig, master=x_avg_std_dev_frame)
-            canvases["Y Avg Std Dev"] = canvas  # <--- SAVE IT
+            canvases["Y Average Standard Deviation"] = canvas  # <--- SAVE IT
             canvas.draw()
             canvas.get_tk_widget().grid(row=1,column=column_index)
             column_index=column_index+1
@@ -1643,7 +1652,7 @@ def render_charts():
                                 tol_neg=int(data['Arc Flash']['area_average']['neg_tolerance']))
             canvas = FigureCanvasTkAgg(fig, master=class_area_sub_frame)
             canvas.draw()
-            canvases["Area Average"] = canvas  # <--- SAVE IT
+            canvases["Class Area"] = canvas  # <--- SAVE IT
             canvas.get_tk_widget().grid(row=1,column=column_index)
             column_index=column_index+1
             
@@ -1678,7 +1687,7 @@ def render_charts():
                                 tol_pos=int(data['Arc Flash']['area_std_deviation']['pos_tolerance']),
                                 tol_neg=int(data['Arc Flash']['area_std_deviation']['neg_tolerance']))
             canvas = FigureCanvasTkAgg(fig, master=class_std_dev_sub_frame)
-            canvases["Area Std Dev"] = canvas  # <--- SAVE IT
+            canvases["Class Area Standard Deviation"] = canvas  # <--- SAVE IT
             canvas.draw()
             canvas.get_tk_widget().grid(row=1,column=column_index)
             column_index=column_index+1
