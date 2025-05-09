@@ -24,7 +24,9 @@ import sys
 import cv2
 import xml.etree.ElementTree as ET
 from ultralytics import YOLO
-
+from datetime import datetime
+import openpyxl
+from openpyxl.styles import Font
 
 # Set theme and color
 ctk.set_appearance_mode("dark")
@@ -175,6 +177,12 @@ if os.path.exists("segmentation_settings.json"):
         global segmentation_settings
         segmentation_settings = json.load(f)
 
+if os.path.exists("raw_experiment_excel_data.json"):
+    with open("raw_experiment_excel_data.json", 'r') as f:
+        global raw_experiment_excel_data_settings
+        raw_experiment_excel_data_settings = json.load(f)
+        
+
 # Buttons in Control Panel (stays in column 0)
 buttons_frame = ctk.CTkFrame(control_frame)
 buttons_frame.grid(row=1, column=0, padx=10, pady=5, sticky="w")
@@ -237,25 +245,152 @@ def toggle_recording():
                                 hover_color="dark red")
         
         is_recording = True
-        
+        global timestamp, experiment_folder
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        experiment_folder = os.path.join(recording_settings["recording_save_location"], timestamp)
+        os.makedirs(experiment_folder, exist_ok=True)
         update_recording_loop()  # Start the loop
     else:
         record_button.configure(text="Start Recording", 
                                 fg_color="green",
                                 hover_color="dark green")
         is_recording = False     # Stop the loop
+        # Called at the start of the experiment:
+        
+        save_all_charts(graph_settings, canvases)
         update_camera_status('idle')
+
+def save_measurements_to_excel(frame_counter, measurements, excel_settings, exposure_time):
+    global annotation_settings
+    base_dir = experiment_folder
+    excel_path = os.path.join(base_dir, "Raw Segmentation Data.xlsx")  # Updated filename
+
+    # Construct row data from settings and measurements
+    row_data = {
+        "Frame": frame_counter,
+        "Segmentation Type": excel_settings.get("Segmentation Type", ""),
+        "Filename": f"frame_{frame_counter:05d}.png",
+        "Starting Exposure Time": excel_settings.get("Starting Exposure Time (\u03bcs)", ""),
+        "Ending Exposure Time": excel_settings.get("Ending Exposure Time (\u03bcs)", ""),
+        "Increment": excel_settings.get("Increment (\u03bcs)", ""),
+        "Exposure Time": exposure_time,
+        "Filter Applied": excel_settings.get("Filter Applied", ""),
+        "Material": excel_settings.get("Material", ""),
+        "Job Number": excel_settings.get("Job Number", ""),
+        "Wire Feed Speed (in/min)": excel_settings.get("Wire Feed Speed (in/min)", ""),
+        "Travel Speed (in/min)": excel_settings.get("Travel Speed (in/min)", ""),
+        "Camera Model": excel_settings.get("Camera Model", ""),
+        "Lens Model": excel_settings.get("Lens Model", ""),
+        "Illumination": excel_settings.get("Illumination", ""),
+        "Viewing Angle": excel_settings.get("Viewing Angle", ""),
+        "Shielding Gas": excel_settings.get("Shielding Gas", ""),
+        "Current (A)": excel_settings.get("Current (A)", ""),
+        "Voltage (V)": excel_settings.get("Voltage (V)", ""),
+        "Heat Input": excel_settings.get("Heat Input (J/mm)", ""),
+        "CTWD": excel_settings.get("CTWD (mm)", ""),
+    }
+
+    # Add measurements per class
+    for feature, data in measurements.items():
+        x_min = data.get("x_min")
+        x_max = data.get("x_max")
+        y_min = data.get("y_min")
+        y_max = data.get("y_max")
+        
+        if x_min is not None and x_max is not None:
+            data["x_avg"] = (x_min + x_max) / 2
+        else:
+            data["x_avg"] = None
+
+        if y_min is not None and y_max is not None:
+            data["y_avg"] = (y_min + y_max) / 2
+        else:
+            data["y_avg"] = None
+    
+    for feature in ["Arc Flash", "Solidification Pool", "Welding Wire"]:
+        if feature in measurements:
+            for key, val in measurements[feature].items():
+                col = f"{feature}_{key}"
+                row_data[col] = val
+
+    # Initialize file if needed
+    file_exists = os.path.exists(excel_path)
+    if not file_exists:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Measurements"
+        for i, key in enumerate(row_data.keys(), 1):
+            cell = ws.cell(row=1, column=i, value=key)
+            cell.font = Font(bold=True)
+        wb.save(excel_path)
+
+    # Append data
+    wb = openpyxl.load_workbook(excel_path)
+    ws = wb.active
+    headers = [cell.value for cell in ws[1]]
+    row = [row_data.get(h, "") for h in headers]
+    ws.append(row)
+    wb.save(excel_path)
+
+def save_frame_images(raw_image, annotated_image, segmented_image, frame_counter):
+    global experiment_folder
+    subdirs = {
+        "raw": "Raw Images",
+        "annotated": "Annotated Images",
+        "segmented": "Segmented Images"
+    }
+
+    # Create subdirectories inside the experiment folder
+    for key, subdir in subdirs.items():
+        os.makedirs(os.path.join(experiment_folder, subdir), exist_ok=True)
+
+    if raw_image is not None:
+        raw_path = os.path.join(experiment_folder, subdirs["raw"], f"frame_{frame_counter:05d}.png")
+        cv2.imwrite(raw_path, raw_image)
+
+    if annotated_image is not None:
+        annotated_path = os.path.join(experiment_folder, subdirs["annotated"], f"frame_{frame_counter:05d}.png")
+        cv2.imwrite(annotated_path, annotated_image)
+
+    if segmented_image is not None:
+        segmented_path = os.path.join(experiment_folder, subdirs["segmented"], f"frame_{frame_counter:05d}.png")
+        cv2.imwrite(segmented_path, segmented_image)
+
+def save_all_charts(graph_settings, canvases):
+    if not graph_settings.get("save_charts", False):
+        return  # Don't save charts unless specified
+    
+    save_folder = experiment_folder
+    if not save_folder:
+        print("No save_folder specified in graph_settings.")
+        return
+
+    os.makedirs(save_folder, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    for chart_name, canvas in canvases.items():
+        fig = canvas.figure
+        sanitized_name = chart_name.replace(" ", "_")
+        filename = f"{sanitized_name}_{timestamp}.png"
+        save_path = os.path.join(save_folder, filename)
+        fig.savefig(save_path)
+        print(f"Chart saved: {save_path}")
 
 def update_recording_loop():
     if is_recording:
         try:
             global recording_settings
-            raw_image, annotated_image, segmented_image = video_acquiring(recording_settings, annotation_settings)
+            raw_image, annotated_image, segmented_image, measurements, exposure_time = video_acquiring(recording_settings, annotation_settings)
             frame_dict = {
                 "video_raw": raw_image,
                 "video_annotated": annotated_image,
                 "video_segmented": segmented_image
             }
+            
+            save_frame_images(raw_image, annotated_image, segmented_image, frame_count)
+            if raw_experiment_excel_data_settings.get("Save Raw Data in Excel") == True:
+                save_measurements_to_excel(frame_count, measurements, raw_experiment_excel_data_settings, exposure_time)
             draw_video_previews_from_frames(recording_settings, frame_dict)
         
         finally:
@@ -1080,7 +1215,9 @@ def video_acquiring(recording_settings, annotation_settings):
                     )
             canvases[key].draw()
     
-    return raw_image, annotated_image, segmented_image
+    return raw_image, annotated_image, segmented_image, measurements, exposure_time
+
+
 
 def establish_preview_frames(recording_settings):
     """Create persistent preview frames once"""

@@ -1,5 +1,6 @@
 {
     "apply_segmentation": true,
     "compare_values": false,
-    "segmentation_file": "C:\\Users\\swilmoth\\OneDrive - University of Tennessee\\Basler Research\\model_training\\train\\weights\\best.pt"
+    "segmentation_file": "C:\\Users\\swilmoth\\OneDrive - University of Tennessee\\Basler Research\\model_training\\train\\weights\\best.pt",
+    "save_raw_excel": true
 }

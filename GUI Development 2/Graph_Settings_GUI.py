@@ -174,10 +174,10 @@ class GraphSettingsGUI:
         ctk.CTkCheckBox(save_frame, text="Save all charts after recording", variable=self.save_charts).pack(anchor="w", pady=5)
 
         # Save location
-        save_location_frame = ctk.CTkFrame(main_frame)
-        ctk.CTkLabel(save_location_frame, text="Save Location", padx=5, pady=5).pack()
-        save_location_frame.pack(fill="x", pady=5, padx=5)
-        ctk.CTkButton(save_location_frame, text="Select Save Location", command=self.select_save_location).pack(pady=10)
+        # save_location_frame = ctk.CTkFrame(main_frame)
+        # ctk.CTkLabel(save_location_frame, text="Save Location", padx=5, pady=5).pack()
+        # save_location_frame.pack(fill="x", pady=5, padx=5)
+        # ctk.CTkButton(save_location_frame, text="Select Save Location", command=self.select_save_location).pack(pady=10)
 
         # Save Settings Button
         save_button_frame = ctk.CTkFrame(self.window)
@@ -218,11 +218,9 @@ class GraphSettingsGUI:
 
     def on_closing(self):
         """Properly cleanup widgets and destroy window"""
-        # Release grab before destroying
-        self.window.grab_release()
-        
-        
-        
-        # Destroy window
-        if self.window.winfo_exists():
-            self.window.destroy()
+        try:
+            if self.window.winfo_exists():
+                self.window.grab_release()
+                self.window.destroy()
+        except tk.TclError as e:
+            print(f"Warning during closing: {e}")

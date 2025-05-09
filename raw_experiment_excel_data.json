@@ -1,0 +1,22 @@
+{
+    "Segmentation Type": "Yolov8",
+    "Starting Exposure Time (\u03bcs)": "1000",
+    "Ending Exposure Time (\u03bcs)": "10000",
+    "Increment (\u03bcs)": "1000",
+    "Exposure Time (\u03bcs)": "Filled during iteration",
+    "Filter Applied": "0.8 OD ND",
+    "Material": "316 SS",
+    "Job Number": "50",
+    "Wire Feed Speed (in/min)": "12",
+    "Travel Speed (in/min)": "12",
+    "Camera Model": "Basler acA800-200gc\n",
+    "Lens Model": "C12-2524-25M-P\n",
+    "Illumination": "FALSE",
+    "Viewing Angle": "45",
+    "Shielding Gas": "98% Ar 2% O2",
+    "Current (A)": "14.3",
+    "Voltage (V)": "20.9",
+    "Heat Input (J/mm)": "47.07",
+    "CTWD (mm)": "12",
+    "Save Raw Data in Excel": true
+}
