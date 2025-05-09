@@ -1190,29 +1190,44 @@ def video_acquiring(recording_settings, annotation_settings):
     result = calculate_metrics_over_frames(measurements, graph_settings, output_data)
     if result:
         for key in result:
-        
-            ax=axes[key]
-            metric=metric_to_class_key[key]
-            for feature in ["Arc Flash","Solidification Pool","Welding Wire"]:
+            ax = axes[key]
+            metric = metric_to_class_key[key]
+            for feature in ["Arc Flash", "Solidification Pool", "Welding Wire"]:
+                # Use a copy for lookup since we change the name for display
+                lookup_feature = feature
+                if feature == "Solidification Pool":
+                    feature = "Solidification Zone"  # Display name
+
+                # Get data and thresholds
                 x_data = output_data[key]["Graph Frame Index"]
                 y_data = output_data[key][feature]
-                if feature == "Solidification Pool":
-                    feature = "Solidification Zone"
-                
-                
                 desired_value = int(class_values[str(material_selection)][feature][metric]["value"])
-                tol_pos=int(class_values[str(material_selection)][feature][metric]["pos_tolerance"])
-                tol_neg=int(class_values[str(material_selection)][feature][metric]["pos_tolerance"])
+                tol_pos = int(class_values[str(material_selection)][feature][metric]["pos_tolerance"])
+                tol_neg = int(class_values[str(material_selection)][feature][metric]["neg_tolerance"])  # fixed typo
+
+                # Check for tolerance violation
+                for i, x in enumerate(x_data):
+                    if x > desired_value + tol_pos or x < desired_value - tol_neg:
+                        print(
+                            f"[Tolerance Violation] Feature: {feature}, Metric: {metric}, "
+                            f"Frame Index: {i}, Value: {x}, Expected Range: "
+                            f"{desired_value - tol_neg} to {desired_value + tol_pos}"
+                        )
+                        update_camera_status("tolerance_error")
+                        # break  # optional: break if one violation is enough to trigger status
+
+                # Plot data
                 plot_feature_on_axes(
-                        ax, 
-                        feature, 
-                        x_data, 
-                        y_data,
-                        desired_value,
-                        tol_pos,
-                        tol_neg,
-                        key
-                    )
+                    ax,
+                    feature,
+                    x_data,
+                    y_data,
+                    desired_value,
+                    tol_pos,
+                    tol_neg,
+                    key
+                )
+
             canvases[key].draw()
     
     return raw_image, annotated_image, segmented_image, measurements, exposure_time
