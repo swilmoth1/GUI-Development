@@ -19,6 +19,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import socket
 import threading
+import queue
 from pypylon import pylon
 import sys
 import cv2
@@ -27,6 +28,13 @@ from ultralytics import YOLO
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font
+import torch
+import torch.nn.functional as F
+sys.path.append(os.path.dirname(__file__))  # Ensure current folder is in path
+from annotate_cy import annotate_raw_image
+
+
+
 
 # Set theme and color
 ctk.set_appearance_mode("dark")
@@ -237,28 +245,61 @@ Material_selection_button.grid(row=0, column=5, padx=10, pady=5)
 
 is_recording = False
 
+### TOGGLE RECORDING FUNCTION. THIS IS WHERE THE RECORDING OF THE IMAGES STARTS.
 def toggle_recording():
-    global is_recording
+    global is_recording, timestamp, experiment_folder
+
     if record_button.cget("text") == "Start Recording":
-        record_button.configure(text="Stop Recording", 
-                                fg_color="red",
-                                hover_color="dark red")
-        
+        print("\n--- Starting Recording ---")
+        t0 = time.perf_counter()
+
+        record_button.configure(
+            text="Stop Recording", 
+            fg_color="red",
+            hover_color="dark red"
+        )
         is_recording = True
-        global timestamp, experiment_folder
+        t1 = time.perf_counter()
+        print(f"[Timing] Button updated: {t1 - t0:.4f} s")
+
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         experiment_folder = os.path.join(recording_settings["recording_save_location"], timestamp)
         os.makedirs(experiment_folder, exist_ok=True)
-        update_recording_loop()  # Start the loop
+        t2 = time.perf_counter()
+        print(f"[Timing] Experiment folder created: {t2 - t1:.4f} s")
+
+        threading.Thread(target=video_acquiring_worker, daemon=True).start()
+        t3 = time.perf_counter()
+        print(f"[Timing] Video acquiring thread started: {t3 - t2:.4f} s")
+
+        threading.Thread(target=image_saving_worker, daemon=True).start()
+        t4 = time.perf_counter()
+        print(f"[Timing] Image saving thread started: {t4 - t3:.4f} s")
+
+        threading.Thread(target=measurement_saving_worker, daemon=True).start()
+        t5 = time.perf_counter()
+        print(f"[Timing] Measurement saving thread started: {t5 - t4:.4f} s")
+
+        threading.Thread(target=draw_preview_worker, daemon=True).start()
+        t6 = time.perf_counter()
+        print(f"[Timing] Preview drawing thread started: {t6 - t5:.4f} s")
+
+        update_recording_loop()
+        t7 = time.perf_counter()
+        print(f"[Timing] update_recording_loop() scheduled: {t7 - t6:.4f} s")
+        print(f"[Total Startup Time] {t7 - t0:.4f} s")
+
     else:
-        record_button.configure(text="Start Recording", 
-                                fg_color="green",
-                                hover_color="dark green")
-        is_recording = False     # Stop the loop
-        # Called at the start of the experiment:
-        
+        print("\n--- Stopping Recording ---")
+        record_button.configure(
+            text="Start Recording", 
+            fg_color="green",
+            hover_color="dark green"
+        )
+        is_recording = False
+
         save_all_charts(graph_settings, canvases)
-        update_camera_status('idle')
+        update_camera_status(big_status_display,'idle')
 
 def save_measurements_to_excel(frame_counter, measurements, excel_settings, exposure_time):
     global annotation_settings
@@ -325,7 +366,6 @@ def save_measurements_to_excel(frame_counter, measurements, excel_settings, expo
         wb.save(excel_path)
 
     # Append data
-    wb = openpyxl.load_workbook(excel_path)
     ws = wb.active
     headers = [cell.value for cell in ws[1]]
     row = [row_data.get(h, "") for h in headers]
@@ -377,25 +417,70 @@ def save_all_charts(graph_settings, canvases):
         fig.savefig(save_path)
         print(f"Chart saved: {save_path}")
 
+acquired_queue = queue.Queue()
+save_image_queue = queue.Queue()
+save_measurements_queue = queue.Queue()
+draw_queue = queue.Queue()
+
+def video_acquiring_worker():
+    global is_recording
+    while is_recording:
+        raw_image, annotated_image, segmented_image, measurements, exposure_time = video_acquiring(recording_settings, annotation_settings)
+        frame_data = {
+            "frame_count": frame_count,
+            "raw_image": raw_image,
+            "annotated_image": annotated_image,
+            "segmented_image": segmented_image,
+            "measurements": measurements,
+            "exposure_time": exposure_time
+        }
+        acquired_queue.put(frame_data)
+
+def image_saving_worker():
+    while is_recording:
+        frame_data = save_image_queue.get()
+        save_frame_images(
+            frame_data["raw_image"],
+            frame_data["annotated_image"],
+            frame_data["segmented_image"],
+            frame_data["frame_count"]
+        )
+        
+def measurement_saving_worker():
+    while is_recording:
+        frame_data = save_measurements_queue.get()
+        if raw_experiment_excel_data_settings.get("Save Raw Data in Excel") == True:
+            save_measurements_to_excel(
+                frame_data["frame_count"],
+                frame_data["measurements"],
+                raw_experiment_excel_data_settings,
+                frame_data["exposure_time"]
+            )
+
+def draw_preview_worker():
+    while is_recording:
+        frame_data = draw_queue.get()
+        window.after(0, draw_video_previews_from_frames, recording_settings, {
+            "video_raw": frame_data["raw_image"],
+            "video_annotated": frame_data["annotated_image"],
+            "video_segmented": frame_data["segmented_image"]
+        })
+        
+        
+
 def update_recording_loop():
     if is_recording:
         try:
-            global recording_settings
-            raw_image, annotated_image, segmented_image, measurements, exposure_time = video_acquiring(recording_settings, annotation_settings)
-            frame_dict = {
-                "video_raw": raw_image,
-                "video_annotated": annotated_image,
-                "video_segmented": segmented_image
-            }
-            
-            save_frame_images(raw_image, annotated_image, segmented_image, frame_count)
-            if raw_experiment_excel_data_settings.get("Save Raw Data in Excel") == True:
-                save_measurements_to_excel(frame_count, measurements, raw_experiment_excel_data_settings, exposure_time)
-            draw_video_previews_from_frames(recording_settings, frame_dict)
-        
+            if not acquired_queue.empty():
+                frame_data = acquired_queue.get()
+
+                # Dispatch to workers
+                save_image_queue.put(frame_data)
+                save_measurements_queue.put(frame_data)
+                draw_queue.put(frame_data)
+
         finally:
-            # Schedule next update
-            window.after(30, update_recording_loop)
+            window.after(30, update_recording_loop)  # Schedule next GUI check
 
 record_button = ctk.CTkButton(buttons_frame, 
                              text="Start Recording",
@@ -494,16 +579,10 @@ big_status_display = ctk.CTkLabel(
     anchor="w"
 )
 
-def update_camera_status(state):
-    """
-    Updates the big_status_display label based on the current state.
-
-    Parameters:
-        state (str): One of ['idle', 'recording', 'waiting_rsi', 'tolerance_error']
-    """
+def update_camera_status(label, state, detail=""):
     status_mapping = {
-        'idle':       ("Idle", "yellow"),
-        'recording':  ("Recording", "green"),
+        'idle': ("Idle", "yellow"),
+        'recording': ("Recording", "green"),
         'waiting_rsi': ("Waiting for RSI", "blue"),
         'tolerance_error': ("Out of Tolerance", "red"),
     }
@@ -513,7 +592,12 @@ def update_camera_status(state):
         return
 
     status_text, status_color = status_mapping[state]
-    big_status_display.configure(text=status_text, text_color=status_color)
+    if detail:
+        status_text += f"\n{detail}"
+
+    # Only update if something changed
+    if label.cget("text") != status_text or label.cget("text_color") != status_color:
+        label.configure(text=status_text, text_color=status_color)
 
 
 
@@ -546,7 +630,7 @@ def segment_raw_image(raw_image, segmentation_settings):
 
     # Desired classes
     target_classes = ["Welding Wire", "Solidification Zone", "Arc Flash"]
-    class_names = model.names
+    class_names = ["Arc Flash", "Solidification Pool", "Welding Wire"]
     colors = {
         "Welding Wire": (255, 0, 0),
         "Solidification Zone": (0, 255, 0),
@@ -620,156 +704,156 @@ def set_ET_time(recording_settings,time):
 
         return exposure_time, loop_count
 
-def annotate_raw_image(frame, annotation_settings, exposure_time, loop_count, elapsed_time, fps):
-    annotated_frame = frame
-    frame_height, frame_width, _ = annotated_frame.shape
+# def annotate_raw_image(frame, annotation_settings, exposure_time, loop_count, elapsed_time, fps):
+#     annotated_frame = frame
+#     frame_height, frame_width, _ = annotated_frame.shape
 
-    ### ─── TOP LEFT ───────────────────────────────────────────────
-    if annotation_settings["manual_settings"]["label_positions"].get("top-left"):
-        line_offset = 0
-        top_left_start_y = 30
-        spacing = 20
+#     ### ─── TOP LEFT ───────────────────────────────────────────────
+#     if annotation_settings["manual_settings"]["label_positions"].get("top-left"):
+#         line_offset = 0
+#         top_left_start_y = 30
+#         spacing = 20
 
-        # Exposure Time
-        cv2.putText(annotated_frame, f"ET: {exposure_time}", (10, top_left_start_y + spacing * line_offset),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        line_offset += 1
+#         # Exposure Time
+#         cv2.putText(annotated_frame, f"ET: {exposure_time}", (10, top_left_start_y + spacing * line_offset),
+#                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#         line_offset += 1
 
-        # Time
-        if annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("show"):
-            text = round(elapsed_time,2)
-            cv2.putText(annotated_frame, f"Time: {text}", (10, top_left_start_y + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         # Time
+#         if annotation_settings["manual_settings"]["top_left_fields"]["Time"].get("show"):
+#             text = round(elapsed_time,2)
+#             cv2.putText(annotated_frame, f"Time: {text}", (10, top_left_start_y + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
 
-        # FA
-        if annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("show"):
-            text = annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("value")
-            cv2.putText(annotated_frame, f"FA: {text}", (10, top_left_start_y + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#         # FA
+#         if annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("show"):
+#             text = annotation_settings["manual_settings"]["top_left_fields"]["FA"].get("value")
+#             cv2.putText(annotated_frame, f"FA: {text}", (10, top_left_start_y + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-    ### ─── TOP RIGHT ──────────────────────────────────────────────
-    if annotation_settings["manual_settings"]["label_positions"].get("top-right"):
-        line_offset = 0
-        top_right_start_y = 30
-        spacing = 20
+#     ### ─── TOP RIGHT ──────────────────────────────────────────────
+#     if annotation_settings["manual_settings"]["label_positions"].get("top-right"):
+#         line_offset = 0
+#         top_right_start_y = 30
+#         spacing = 20
 
-        fields = annotation_settings["manual_settings"]["top_right_fields"]
-        if fields["FPS"].get("show"):
-            text = str(round(fps,2))
-            cv2.putText(annotated_frame, "FPS: " + text,
-                        (frame_width - 235, top_right_start_y + spacing * line_offset ),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         fields = annotation_settings["manual_settings"]["top_right_fields"]
+#         if fields["FPS"].get("show"):
+#             text = str(round(fps,2))
+#             cv2.putText(annotated_frame, "FPS: " + text,
+#                         (frame_width - 235, top_right_start_y + spacing * line_offset ),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
             
-        if fields["Running"].get("show"):
-            text = "Basler UI"
-            cv2.putText(annotated_frame, "Running: " + text,
-                        (frame_width - 235, top_right_start_y + spacing * line_offset ),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         if fields["Running"].get("show"):
+#             text = "Basler UI"
+#             cv2.putText(annotated_frame, "Running: " + text,
+#                         (frame_width - 235, top_right_start_y + spacing * line_offset ),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
             
-        if fields["Output"].get("show"):
-            text = "Sample"
-            cv2.putText(annotated_frame, "Output: " + text,
-                        (frame_width - 235, top_right_start_y + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         if fields["Output"].get("show"):
+#             text = "Sample"
+#             cv2.putText(annotated_frame, "Output: " + text,
+#                         (frame_width - 235, top_right_start_y + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
             
-        for field in ["Illum", "Shielding Gas", "Note"]:
-            if fields[field].get("show"):
-                text = f"{field}: {fields[field].get('value')}"
-                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
-                cv2.putText(annotated_frame, text,
-                            (frame_width - 235, top_right_start_y + spacing * line_offset),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                line_offset += 1
+#         for field in ["Illum", "Shielding Gas", "Note"]:
+#             if fields[field].get("show"):
+#                 text = f"{field}: {fields[field].get('value')}"
+#                 text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+#                 cv2.putText(annotated_frame, text,
+#                             (frame_width - 235, top_right_start_y + spacing * line_offset),
+#                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#                 line_offset += 1
 
-    ### ─── BOTTOM LEFT ────────────────────────────────────────────
-    if annotation_settings["manual_settings"]["label_positions"].get("bottom-left"):
-        line_offset = 0
-        bottom_left_start_y = frame_height - 100
-        spacing = 20
+#     ### ─── BOTTOM LEFT ────────────────────────────────────────────
+#     if annotation_settings["manual_settings"]["label_positions"].get("bottom-left"):
+#         line_offset = 0
+#         bottom_left_start_y = frame_height - 100
+#         spacing = 20
 
-        fields = annotation_settings["manual_settings"]["bottom_left_fields"]
-        for field in ["Material", "Job Number", "Wire Feed Speed", "Travel Speed"]:
-            if fields[field].get("show"):
-                text = f"{field}: {fields[field].get('value')}"
-                cv2.putText(annotated_frame, text,
-                            (10, bottom_left_start_y + spacing * line_offset),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                line_offset += 1
+#         fields = annotation_settings["manual_settings"]["bottom_left_fields"]
+#         for field in ["Material", "Job Number", "Wire Feed Speed", "Travel Speed"]:
+#             if fields[field].get("show"):
+#                 text = f"{field}: {fields[field].get('value')}"
+#                 cv2.putText(annotated_frame, text,
+#                             (10, bottom_left_start_y + spacing * line_offset),
+#                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#                 line_offset += 1
 
-    ### ─── BOTTOM RIGHT ───────────────────────────────────────────
-    if annotation_settings["manual_settings"]["label_positions"].get("bottom-right"):
-        line_offset = 0
-        bottom_right_start = frame_height - 120
-        spacing = 20
+#     ### ─── BOTTOM RIGHT ───────────────────────────────────────────
+#     if annotation_settings["manual_settings"]["label_positions"].get("bottom-right"):
+#         line_offset = 0
+#         bottom_right_start = frame_height - 120
+#         spacing = 20
 
-        # Camera
-        if annotation_settings["manual_settings"]["bottom_right_fields"]["Camera"].get("show"):
-            text = annotation_settings["manual_settings"]["bottom_right_fields"]["Camera"].get("value")
-            cv2.putText(annotated_frame, text,
-                        (frame_width - 200, bottom_right_start + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         # Camera
+#         if annotation_settings["manual_settings"]["bottom_right_fields"]["Camera"].get("show"):
+#             text = annotation_settings["manual_settings"]["bottom_right_fields"]["Camera"].get("value")
+#             cv2.putText(annotated_frame, text,
+#                         (frame_width - 200, bottom_right_start + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
 
-        # Lens + Viewing Angle
-        fields = annotation_settings["manual_settings"]["bottom_right_fields"]
-        show_lens = fields["Lens"].get("show")
-        show_angle = fields["Viewing Angle"].get("show")
-        lens_val = fields["Lens"].get("value")
-        angle_val = fields["Viewing Angle"].get("value")
+#         # Lens + Viewing Angle
+#         fields = annotation_settings["manual_settings"]["bottom_right_fields"]
+#         show_lens = fields["Lens"].get("show")
+#         show_angle = fields["Viewing Angle"].get("show")
+#         lens_val = fields["Lens"].get("value")
+#         angle_val = fields["Viewing Angle"].get("value")
 
-        if show_lens or show_angle:
-            combined = []
-            if show_lens:
-                combined.append(lens_val)
-            if show_angle:
-                combined.append(angle_val)
-            text = " | ".join(combined)
-            cv2.putText(annotated_frame, text,
-                        (frame_width - 200, bottom_right_start + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         if show_lens or show_angle:
+#             combined = []
+#             if show_lens:
+#                 combined.append(lens_val)
+#             if show_angle:
+#                 combined.append(angle_val)
+#             text = " | ".join(combined)
+#             cv2.putText(annotated_frame, text,
+#                         (frame_width - 200, bottom_right_start + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
 
-        # Focus
-        if fields["Focus"].get("show") & fields["Aperature"].get("show"):
-            cv2.putText(annotated_frame, "F:" + fields["Focus"].get("value") + " | A:" + fields["Aperature"].get("value"),
-                        (frame_width - 200, bottom_right_start + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
-        elif fields["Focus"].get("show"):
-            cv2.putText(annotated_frame, "F:" + fields["Focus"].get("value"),
-                        (frame_width - 200, bottom_right_start + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         # Focus
+#         if fields["Focus"].get("show") & fields["Aperature"].get("show"):
+#             cv2.putText(annotated_frame, "F:" + fields["Focus"].get("value") + " | A:" + fields["Aperature"].get("value"),
+#                         (frame_width - 200, bottom_right_start + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
+#         elif fields["Focus"].get("show"):
+#             cv2.putText(annotated_frame, "F:" + fields["Focus"].get("value"),
+#                         (frame_width - 200, bottom_right_start + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
 
-        # Aperture (note: JSON typo was "Aperature" but use "Aperture" for consistency)
+#         # Aperture (note: JSON typo was "Aperature" but use "Aperture" for consistency)
         
             
-        elif fields["Aperature"].get("show"):
-            cv2.putText(annotated_frame, "A:" + fields["Aperature"].get("value"),
-                        (frame_width - 200, bottom_right_start + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         elif fields["Aperature"].get("show"):
+#             cv2.putText(annotated_frame, "A:" + fields["Aperature"].get("value"),
+#                         (frame_width - 200, bottom_right_start + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
 
-        # Distance
-        if fields["Distance"].get("show"):
-            text = f"Distance: {fields['Distance'].get('value')}"
-            cv2.putText(annotated_frame, text,
-                        (frame_width - 200, bottom_right_start + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            line_offset += 1
+#         # Distance
+#         if fields["Distance"].get("show"):
+#             text = f"Distance: {fields['Distance'].get('value')}"
+#             cv2.putText(annotated_frame, text,
+#                         (frame_width - 200, bottom_right_start + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#             line_offset += 1
 
-        # CTWD
-        if fields["CTWD (mm)"].get("show"):
-            text = f"dNtW (mm): {fields['CTWD (mm)'].get('value')}"
-            cv2.putText(annotated_frame, text,
-                        (frame_width - 200, bottom_right_start + spacing * line_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+#         # CTWD
+#         if fields["CTWD (mm)"].get("show"):
+#             text = f"dNtW (mm): {fields['CTWD (mm)'].get('value')}"
+#             cv2.putText(annotated_frame, text,
+#                         (frame_width - 200, bottom_right_start + spacing * line_offset),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-    return annotated_frame
+#     return annotated_frame
 
 def calculate_fps(frame_count, start_time):
     # Calculate the fps of the video based on the current time, start time, and frames currently collected.
@@ -1023,71 +1107,106 @@ def create_visualization(frame, masks, boxes, measurements):
         
     return output
 
-   
+model = YOLO(segmentation_settings["segmentation_file"]) 
+class_names = ['Arc Flash', 'Solidification Pool', 'Welding Wire']
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def process_frame(frame):
-        """Process a single frame and return segmentation measurements."""
-        class_names = ['Arc Flash', 'Solidification Pool', 'Welding Wire']
-        model_path = segmentation_settings["segmentation_file"]
-        model = YOLO(model_path)
-        
-        results = model(frame)[0]
-        data = {name: {
-            'area': None,
-            'x_min': None,
-            'x_max': None,
-            'y_min': None,
-            'y_max': None,
-            'width': None,
-            'height': None
-        } for name in class_names}
-        
-        largest_masks = {i: None for i in range(len(class_names))}
-        largest_boxes = {i: None for i in range(len(class_names))}
-        largest_areas = {i: 0 for i in range(len(class_names))}
-        
-        if hasattr(results, 'masks') and results.masks is not None:
-            for seg, box in zip(results.masks.data, results.boxes.data):
-                cls = int(box[5])
-                cls_name = class_names[cls]
-                
-                # Process mask
-                mask = seg.cpu().numpy().squeeze()
-                mask = cv2.resize(mask, (frame.shape[1], frame.shape[0]))
-                mask = (mask > 0.5).astype(np.uint8)
-                
-                area = np.sum(mask)
-                
-                # Update if this is the largest instance of this class
-                if area > largest_areas[cls]:
-                    largest_areas[cls] = area
-                    largest_masks[cls] = mask
-                    largest_boxes[cls] = box
-                    
-                    # Calculate segmentation dimensions
-                    if np.any(mask):  # If mask is not empty
-                        rows = np.any(mask, axis=1)
-                        cols = np.any(mask, axis=0)
-                        y_indices = np.where(rows)[0]
-                        x_indices = np.where(cols)[0]
-                        
-                        if len(y_indices) > 0 and len(x_indices) > 0:
-                            y_min, y_max = y_indices[[0, -1]]
-                            x_min, x_max = x_indices[[0, -1]]
-                            width = x_max - x_min
-                            height = y_max - y_min
-                            
-                            data[cls_name].update({
-                                'area': area,
-                                'x_min': int(x_min),
-                                'x_max': int(x_max),
-                                'y_min': int(y_min),
-                                'y_max': int(y_max),
-                                'width': int(width),
-                                'height': int(height)
-                            })
-        
-        return data, largest_masks, largest_boxes
+def process_frame(frame, model, class_names):
+    """Optimized: Process a frame and return segmentation results with timing."""
+    # t_start = time.time()
+
+    orig_H, orig_W, _ = frame.shape
+    
+
+    # model.to(device)
+    # model.eval()
+
+    # Convert frame to tensor
+    # t_preprocessing_start = time.time()
+    input_size = 640
+    resized_frame = cv2.resize(frame, (input_size, input_size))
+
+    frame_tensor = (
+        torch.from_numpy(resized_frame)
+        .permute(2, 0, 1)
+        .unsqueeze(0)
+        .float()
+        / 255.0
+    )
+
+    if device == "cuda":
+        frame_tensor = frame_tensor.to(device).half()
+        model = model.half()
+    else:
+        frame_tensor = frame_tensor.to(device)
+
+    # t_inference_start = time.time()
+    results = model(frame_tensor)[0]
+    # t_post_inference_start = time.time()
+
+    # Initialize data structures
+    data = {name: {
+        'area': None,
+        'x_min': None,
+        'x_max': None,
+        'y_min': None,
+        'y_max': None,
+        'width': None,
+        'height': None
+    } for name in class_names}
+
+    largest_masks = {i: None for i in range(len(class_names))}
+    largest_boxes = {i: None for i in range(len(class_names))}
+    largest_areas = {i: 0 for i in range(len(class_names))}
+
+    if hasattr(results, 'masks') and results.masks is not None:
+        masks = results.masks.data
+        boxes = results.boxes.data
+
+        masks = F.interpolate(masks.unsqueeze(1).float(), size=(orig_H, orig_W), mode='nearest').squeeze(1)
+
+        for i, (mask, box) in enumerate(zip(masks, boxes)):
+            cls = int(box[5])
+            cls_name = class_names[cls]
+
+            binary_mask = (mask > 0.5)
+            area = binary_mask.sum().item()
+
+            if area > largest_areas[cls]:
+                largest_areas[cls] = area
+                largest_masks[cls] = binary_mask.detach().cpu().numpy().astype(np.uint8)
+                largest_boxes[cls] = box.detach().cpu()
+
+                ys, xs = torch.where(binary_mask)
+                if ys.numel() > 0:
+                    x_min = int(xs.min().item())
+                    x_max = int(xs.max().item())
+                    y_min = int(ys.min().item())
+                    y_max = int(ys.max().item())
+                    width = x_max - x_min
+                    height = y_max - y_min
+
+                    data[cls_name].update({
+                        'area': int(area),
+                        'x_min': x_min,
+                        'x_max': x_max,
+                        'y_min': y_min,
+                        'y_max': y_max,
+                        'width': width,
+                        'height': height
+                    })
+
+    # t_end = time.time()
+
+    # Print timing for diagnostics
+    # print(f"Total time: {t_end - t_start:.4f}s")
+    # print(f" - Preprocessing: {t_inference_start - t_preprocessing_start:.4f}s")
+    # print(f" - Inference: {t_post_inference_start - t_inference_start:.4f}s")
+    # print(f" - Post-processing: {t_end - t_post_inference_start:.4f}s")
+
+    return data, largest_masks, largest_boxes
+
+
 global metric_to_class_key
 metric_to_class_key = {
     "X Average": "x_average",
@@ -1101,29 +1220,64 @@ metric_to_class_key = {
     "Class Area" : "area_average",
     "Class Area Standard Deviation" : "area_std_deviation"
 }
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = YOLO("yolov8n-seg.pt")  # Or however you load your model
+model.to(device)
+model.eval()
+class_names = ["Arc Flash", "Solidification Pool", "Welding Wire"]  # Or your own list like ["Wire", "Arc", ...]
+
+def initialize_camera_settings(camera):
+    try:
+        # Basic settings that should work on most Basler cameras
+        if camera.GetDeviceInfo().IsGigEDevice():
+            # GigE specific settings
+            if hasattr(camera, 'GevSCPSPacketSize'):
+                camera.GevSCPSPacketSize.SetValue(9000)
+            if hasattr(camera, 'GevSCPD'):
+                camera.GevSCPD.SetValue(0)
+            
+        # Check and set buffer and queue settings
+        if hasattr(camera, 'MaxNumBuffer'):
+            camera.MaxNumBuffer.SetValue(5)
+        if hasattr(camera, 'OutputQueueSize'):
+            camera.OutputQueueSize.SetValue(1)
+            
+        # Set acquisition settings if available
+        if hasattr(camera, 'GrabStrategy'):
+            camera.GrabStrategy.SetValue('LatestImageOnly')
+        if hasattr(camera, 'AcquisitionFrameRateEnable'):
+            camera.AcquisitionFrameRateEnable.SetValue(True)
+            if hasattr(camera, 'AcquisitionFrameRate'):
+                camera.AcquisitionFrameRate.SetValue(30.0)
+                
+        camera._settings_initialized = True
+        print("✅ Camera settings initialized successfully")
+        
+    except Exception as e:
+        print(f"❌ Error initializing camera settings: {e}")
+        # Set flag even if failed to prevent repeated attempts
+        camera._settings_initialized = True
+
+
 
 def video_acquiring(recording_settings, annotation_settings):
-    global frame_count
-    global start_time_integer
-    global start_time
-    global prev_frame_time
-    global segmentation_settings
-    global image_paths
-    global output_data
-    global metric_to_class_key
-    
+    import time  # Make sure this is imported
+    global frame_count, start_time_integer, start_time, prev_frame_time
+    global segmentation_settings, image_paths, output_data, metric_to_class_key
+
+    t_start = time.perf_counter()
+
     if recording_settings.get("rsi_mode") == "Automatic":
-        update_camera_status("waiting_rsi")
+        update_camera_status(big_status_display,"waiting_rsi")
         cam_value = receive_data()
         while cam_value != 1:
             time.sleep(0.05)
             cam_value = receive_data()
-
-        update_camera_status("recording")
+        update_camera_status(big_status_display,"recording")
     else:
-        update_camera_status("recording")
-        
-    # Start timing
+        update_camera_status(big_status_display,"recording")
+    t_cam_check = time.perf_counter()
+
     if start_time_integer == 0:
         start_time = time.time()
         prev_frame_time = start_time
@@ -1132,48 +1286,65 @@ def video_acquiring(recording_settings, annotation_settings):
     elapsed_time = time.time() - start_time
     frame_count += 1
 
-    # Setup exposure time
     exposure_time, loop_count = set_ET_time(recording_settings, elapsed_time)
     camera.ExposureTimeRaw.SetValue(int(exposure_time))
-
-    # Grab frame
-    grab_result = camera.GrabOne(1000)
+    t_exposure = time.perf_counter()
+    
+    
+    
+    
+    grab_result = camera.GrabOne(1000)  # Keep timeout but with optimized settings
+    
+    t_grab = time.perf_counter()
 
     raw_image = None
     annotated_image = None
+    segmented_image = None
+    measurements = {}
 
     if grab_result and grab_result.IsValid() and grab_result.GrabSucceeded():
         img_array = grab_result.Array
         raw_rgb = cv2.cvtColor(img_array, cv2.COLOR_BAYER_BG2RGB)
-
-        # Calculate instantaneous FPS
         fps, prev_frame_time = calculate_instantaneous_fps(prev_frame_time)
 
         if recording_settings.get("video_raw"):
             raw_image = raw_rgb.copy()
 
         if recording_settings.get("video_annotated"):
-            
             annotated_image = annotate_raw_image(
-                raw_rgb.copy(),
-                annotation_settings,
-                exposure_time,
-                loop_count,
-                elapsed_time,
-                fps,
+                raw_rgb.copy(), annotation_settings, exposure_time,
+                loop_count, elapsed_time, fps
             )
+
+        t_annotation = time.perf_counter()
+
         if recording_settings.get("video_segmented"):
-            # Testing code
+            t0 = time.perf_counter()
             image_path = image_paths["image_raw"]
+            t1 = time.perf_counter()
+            print(f"[Timing] Fetch image path: {(t1 - t0)*1000:.2f} ms")
+
             image = Image.open(image_path).convert('RGB')
+            t2 = time.perf_counter()
+            print(f"[Timing] Load and convert image: {(t2 - t1)*1000:.2f} ms")
+
             sample_image = np.array(image, dtype=np.uint8)
-            measurements, largest_masks, largest_boxes = process_frame(sample_image)
+            t3 = time.perf_counter()
+            print(f"[Timing] Convert image to NumPy array: {(t3 - t2)*1000:.2f} ms")
+
+            measurements, largest_masks, largest_boxes = process_frame(sample_image, model, class_names)
+            t4 = time.perf_counter()
+            print(f"[Timing] Run segmentation (process_frame): {(t4 - t3)*1000:.2f} ms")
+
             segmented_image = create_visualization(sample_image, largest_masks, largest_boxes, measurements)
-            # class_data, segmented_image = segment_raw_image(sample_image, segmentation_settings)
-            # plt.figure(); plt.imshow(segmented_image); plt.axis('off'); plt.show()
-            # end testing code
-            # class_data, segmented_image = segment_raw_image(raw_image, segmentation_settings)
-        # ⚠️ Check if RSI signal has ended (cam_value turned back to 0)
+            t5 = time.perf_counter()
+            print(f"[Timing] Create visualization: {(t5 - t4)*1000:.2f} ms")
+
+            total_time = t5 - t0
+            print(f"[Timing] Total time for video_segmented block: {total_time*1000:.2f} ms")
+
+        t_segmentation = time.perf_counter()
+
         if recording_settings.get("rsi_mode") == "Automatic":
             cam_value = receive_data()
             if cam_value == 0:
@@ -1181,55 +1352,53 @@ def video_acquiring(recording_settings, annotation_settings):
                 toggle_recording()
     else:
         print("❌ Grab failed or returned invalid result.")
-    # X Average 
-    # ax = axes["X Average"]
-    #plot_feature_on_axes(ax,"Arc Flash",x_data = [10,11,12], y_data = [10,13,16])   
-    #canvases["X Average"].draw()
-    
-    
-    result = calculate_metrics_over_frames(measurements, graph_settings, output_data)
-    if result:
-        for key in result:
-            ax = axes[key]
-            metric = metric_to_class_key[key]
-            for feature in ["Arc Flash", "Solidification Pool", "Welding Wire"]:
-                # Use a copy for lookup since we change the name for display
-                lookup_feature = feature
-                if feature == "Solidification Pool":
-                    feature = "Solidification Zone"  # Display name
 
-                # Get data and thresholds
-                x_data = output_data[key]["Graph Frame Index"]
-                y_data = output_data[key][feature]
-                desired_value = int(class_values[str(material_selection)][feature][metric]["value"])
-                tol_pos = int(class_values[str(material_selection)][feature][metric]["pos_tolerance"])
-                tol_neg = int(class_values[str(material_selection)][feature][metric]["neg_tolerance"])  # fixed typo
+    t_rsi = time.perf_counter()
+    if recording_settings.get("video_segmented"):
+        result = calculate_metrics_over_frames(measurements, graph_settings, output_data)
+        if result:
+            for key in result:
+                ax = axes[key]
+                metric = metric_to_class_key[key]
+                for feature in ["Arc Flash", "Solidification Pool", "Welding Wire"]:
+                    x_data = output_data[key]["Graph Frame Index"]
+                    y_data = output_data[key][feature]
 
-                # Check for tolerance violation
-                for i, x in enumerate(x_data):
-                    if x > desired_value + tol_pos or x < desired_value - tol_neg:
-                        print(
-                            f"[Tolerance Violation] Feature: {feature}, Metric: {metric}, "
-                            f"Frame Index: {i}, Value: {x}, Expected Range: "
-                            f"{desired_value - tol_neg} to {desired_value + tol_pos}"
-                        )
-                        update_camera_status("tolerance_error")
-                        # break  # optional: break if one violation is enough to trigger status
+                    if feature == "Solidification Pool":
+                        feature = "Solidification Zone"
 
-                # Plot data
-                plot_feature_on_axes(
-                    ax,
-                    feature,
-                    x_data,
-                    y_data,
-                    desired_value,
-                    tol_pos,
-                    tol_neg,
-                    key
-                )
+                    desired_value = int(class_values[str(material_selection)][feature][metric]["value"])
+                    tol_pos = int(class_values[str(material_selection)][feature][metric]["pos_tolerance"])
+                    tol_neg = int(class_values[str(material_selection)][feature][metric]["neg_tolerance"])
 
-            canvases[key].draw()
-    
+                    if segmentation_settings.get("compare_values"):
+                        for i, y in enumerate(y_data):
+                            if y > desired_value + tol_pos or y < desired_value - tol_neg:
+                                detail = (
+                                    f"{feature} - {metric} out of tolerance at frame {i} "
+                                    f"(Value: {y}, Expected: {desired_value} ±{tol_neg}/{tol_pos})"
+                                )
+                                print(f"[Tolerance Violation] {detail}")
+                                update_camera_status(big_status_display,"tolerance_error", detail)
+
+                    plot_feature_on_axes(
+                        ax, feature, x_data, y_data,
+                        desired_value, tol_pos, tol_neg, key
+                    )
+                canvases[key].draw()
+
+    t_plot = time.perf_counter()
+
+    # --- Print step durations ---
+    print(f"[Timing] RSI check:              {(t_cam_check - t_start):.4f} s")
+    print(f"[Timing] Exposure config:        {(t_exposure - t_cam_check):.4f} s")
+    print(f"[Timing] Frame grab:             {(t_grab - t_exposure):.4f} s")
+    print(f"[Timing] Annotation:             {(t_annotation - t_grab):.4f} s")
+    print(f"[Timing] Segmentation + masks:   {(t_segmentation - t_annotation):.4f} s")
+    print(f"[Timing] RSI post check:         {(t_rsi - t_segmentation):.4f} s")
+    print(f"[Timing] Metric calc + plotting: {(t_plot - t_rsi):.4f} s")
+    print(f"[Timing] Total video_acquiring:  {(t_plot - t_start):.4f} s\n")
+
     return raw_image, annotated_image, segmented_image, measurements, exposure_time
 
 
@@ -1887,6 +2056,9 @@ def update_status_loop(label):
                 cam_obj = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateDevice(device))
                 cam_obj.Open()
                 camera = cam_obj  # Store for later use
+                # camera.AcquisitionFrameRateEnable.SetValue(True)
+                
+                # camera.AcquisitionFrameRate.SetValue(20.0)
                 connected_once = True
 
                 # Update label to Connected

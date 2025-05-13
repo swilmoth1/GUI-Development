@@ -1,9 +1,9 @@
 {
     "Segmentation Type": "Yolov8",
-    "Starting Exposure Time (\u03bcs)": "1000",
-    "Ending Exposure Time (\u03bcs)": "10000",
-    "Increment (\u03bcs)": "1000",
-    "Exposure Time (\u03bcs)": "Filled during iteration",
+    "Starting Exposure Time (\u03bcs)": "N/A",
+    "Ending Exposure Time (\u03bcs)": "N/A",
+    "Increment (\u03bcs)": "N/A",
+    "Exposure Time (\u03bcs)": "100",
     "Filter Applied": "0.8 OD ND",
     "Material": "316 SS",
     "Job Number": "50",
@@ -18,5 +18,5 @@
     "Voltage (V)": "20.9",
     "Heat Input (J/mm)": "47.07",
     "CTWD (mm)": "12",
-    "Save Raw Data in Excel": true
+    "Save Raw Data in Excel": false
 }
