@@ -52,6 +52,7 @@ global line_refs
 global fill_refs
 fill_refs = {} 
 line_refs = {}
+centerline_refs = {}
 frame_count = 0
 
 
@@ -1320,23 +1321,23 @@ def video_acquiring(recording_settings, annotation_settings):
 
         if recording_settings.get("video_segmented"):
             t0 = time.perf_counter()
-            image_path = image_paths["image_raw"]
-            t1 = time.perf_counter()
-            print(f"[Timing] Fetch image path: {(t1 - t0)*1000:.2f} ms")
+            # image_path = image_paths["image_raw"]
+            # t1 = time.perf_counter()
+            # print(f"[Timing] Fetch image path: {(t1 - t0)*1000:.2f} ms")
 
-            image = Image.open(image_path).convert('RGB')
-            t2 = time.perf_counter()
-            print(f"[Timing] Load and convert image: {(t2 - t1)*1000:.2f} ms")
+            # image = Image.open(image_path).convert('RGB')
+            # t2 = time.perf_counter()
+            # print(f"[Timing] Load and convert image: {(t2 - t1)*1000:.2f} ms")
 
-            sample_image = np.array(image, dtype=np.uint8)
-            t3 = time.perf_counter()
-            print(f"[Timing] Convert image to NumPy array: {(t3 - t2)*1000:.2f} ms")
+            # sample_image = np.array(image, dtype=np.uint8)
+            # t3 = time.perf_counter()
+            # print(f"[Timing] Convert image to NumPy array: {(t3 - t2)*1000:.2f} ms")
 
-            measurements, largest_masks, largest_boxes = process_frame(sample_image, model, class_names)
+            measurements, largest_masks, largest_boxes = process_frame(raw_image, model, class_names)
             t4 = time.perf_counter()
             print(f"[Timing] Run segmentation (process_frame): {(t4 - t3)*1000:.2f} ms")
 
-            segmented_image = create_visualization(sample_image, largest_masks, largest_boxes, measurements)
+            segmented_image = create_visualization(raw_image, largest_masks, largest_boxes, measurements)
             t5 = time.perf_counter()
             print(f"[Timing] Create visualization: {(t5 - t4)*1000:.2f} ms")
 
@@ -1561,13 +1562,14 @@ def plot_feature_on_axes(ax, feature_name, x_data, y_data,
 
     color = FEATURE_COLORS.get(feature_name, "black")
 
-    # Ensure storage dicts exist
     if graph_key not in line_refs:
         line_refs[graph_key] = {}
     if graph_key not in fill_refs:
         fill_refs[graph_key] = {}
+    if graph_key not in centerline_refs:
+        centerline_refs[graph_key] = {}
 
-    # --- Plot or update line ---
+    # Plot or update main line
     if feature_name not in line_refs[graph_key]:
         line, = ax.plot(x_data, y_data, label=feature_name, color=color)
         line_refs[graph_key][feature_name] = line
@@ -1576,33 +1578,35 @@ def plot_feature_on_axes(ax, feature_name, x_data, y_data,
         line.set_xdata(x_data)
         line.set_ydata(y_data)
 
-    # --- Plot or update shaded tolerance band ---
+    x_min = min(x_data)
+    x_max = max(x_data)
+
+    # Plot or update shaded tolerance band
     if desired_value is not None and tol_pos is not None and tol_neg is not None:
         lower_bound = desired_value - tol_neg
         upper_bound = desired_value + tol_pos
 
-        # Remove old fill if it exists
         if feature_name in fill_refs[graph_key]:
             fill = fill_refs[graph_key][feature_name]
-            fill.remove()
-
-        # Create new fill spanning full visible x-range
-        x_min, x_max = min(x_data), max(x_data)
+            fill.remove()  # Reuse logic can go here instead
         fill = ax.axhspan(lower_bound, upper_bound, color=color, alpha=0.2)
         fill_refs[graph_key][feature_name] = fill
 
-        # Draw dashed centerline at desired value
-        ax.axhline(desired_value, color=color, linestyle='--', linewidth=1)
+        # Update or create centerline
+        if feature_name in centerline_refs[graph_key]:
+            centerline = centerline_refs[graph_key][feature_name]
+            centerline.set_ydata([desired_value, desired_value])
+        else:
+            centerline = ax.axhline(desired_value, color=color, linestyle='--', linewidth=1)
+            centerline_refs[graph_key][feature_name] = centerline
 
-    # Adjust x-axis to start at the first x_data point
-    x_min, x_max = min(x_data), max(x_data)
     if x_min == x_max:
         x_min -= 0.5
         x_max += 0.5
     ax.set_xlim(left=x_min, right=x_max)
+
     ax.relim()
     ax.autoscale_view(scalex=False, scaley=True)
-    ax.legend()
 
 def render_charts():
     # Clear the frame first
